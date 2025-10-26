@@ -411,6 +411,25 @@ wheels = [
 ]
 
 [[package]]
+name = "chonkie"
+version = "1.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "loguru" },
+    { name = "numpy" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8e/9c/4c453bc785d7d47af7c658509b6c26188776db6e4cfb13f8908b8656643d/chonkie-1.4.0.tar.gz", hash = "sha256:6a7c68ca7d556df6accf21706f961536ea13b24d8173a4b7bbf6c0266d0f4da6", size = 387032, upload-time = "2025-10-11T09:36:39.358Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b8/92/a3a97ffc9953c2e6890cf8d5c58705dfd119e491b2ac75c1a3322745f597/chonkie-1.4.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:fb98926db484e9597514f9a7d632e79b9a8a37ccefadc9e1acf6c9c1d2a53062", size = 517040, upload-time = "2025-10-11T09:36:27.63Z" },
+    { url = "https://files.pythonhosted.org/packages/3d/65/6490aa81fed65a2e4631959ab76ceaffeaa3e8382b25e43e4a5d33070037/chonkie-1.4.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:4b13b4c35b3e7355c88709a19d1529164e5229150ffd8476de668753af7742f1", size = 1027212, upload-time = "2025-10-11T09:36:29.117Z" },
+    { url = "https://files.pythonhosted.org/packages/99/68/f505a4a5644730c34edaa1ebb14ea5ca3c02112e10326fae74702cc09150/chonkie-1.4.0-cp312-cp312-win_amd64.whl", hash = "sha256:d421f292cddad6449e7c6b0a107a6ce11461f246225ca8a3d99cd389addf0855", size = 516872, upload-time = "2025-10-11T09:36:30.247Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/91/7f59990ffa6751672c3f6a21ebbaa3fe8f805829a205b3c9fd4a6026110d/chonkie-1.4.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:fa455edfa35d851eb32056d84055f1a9ba5ed1e93954bae9a2b771236cb160bd", size = 515466, upload-time = "2025-10-11T09:36:31.552Z" },
+    { url = "https://files.pythonhosted.org/packages/11/fa/256f5189b29d7fc2f8ebb593a49d550458dbdc1749a93c1be29067a3fb93/chonkie-1.4.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:79938c88a67a074cbe1dda262da21d6fa5ed2359ecbf0f2d6dc8cae1dc419359", size = 1017863, upload-time = "2025-10-11T09:36:32.952Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/1e/30a3eaec13f070cedbb37689f4a5157aaff5dcb8a34075a01cf5ca567d6d/chonkie-1.4.0-cp313-cp313-win_amd64.whl", hash = "sha256:db22a81e6c2b45a10946d9ee4f17d2d47e8122ea1f18c8713b175b46fd0e4764", size = 515947, upload-time = "2025-10-11T09:36:34.327Z" },
+]
+
+[[package]]
 name = "click"
 version = "8.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1114,10 +1133,14 @@ dependencies = [
     { name = "aioftp" },
     { name = "aiohttp" },
     { name = "arrow" },
+    { name = "chonkie" },
     { name = "crawl4ai" },
     { name = "ddgs" },
     { name = "loguru" },
     { name = "lxml" },
+    { name = "pgvector" },
+    { name = "psycopg" },
+    { name = "pypdf" },
     { name = "python-dotenv" },
     { name = "reportlab" },
     { name = "sqlmodel" },
@@ -1133,10 +1156,14 @@ requires-dist = [
     { name = "aioftp", specifier = ">=0.27.2" },
     { name = "aiohttp", specifier = ">=3.13.1" },
     { name = "arrow", specifier = ">=1.4.0" },
+    { name = "chonkie", specifier = ">=1.4.0" },
     { name = "crawl4ai", specifier = ">=0.7.6" },
     { name = "ddgs", specifier = ">=9.5.2" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "lxml", specifier = ">=5.4.0" },
+    { name = "pgvector", specifier = ">=0.4.1" },
+    { name = "psycopg", specifier = ">=3.2.12" },
+    { name = "pypdf", specifier = ">=6.1.3" },
     { name = "python-dotenv", specifier = ">=1.1.1" },
     { name = "reportlab", specifier = ">=4.4.4" },
     { name = "sqlmodel", specifier = ">=0.0.27" },
@@ -1662,6 +1689,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pgvector"
+version = "0.4.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/44/43/9a0fb552ab4fd980680c2037962e331820f67585df740bedc4a2b50faf20/pgvector-0.4.1.tar.gz", hash = "sha256:83d3a1c044ff0c2f1e95d13dfb625beb0b65506cfec0941bfe81fd0ad44f4003", size = 30646, upload-time = "2025-04-26T18:56:37.151Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bf/21/b5735d5982892c878ff3d01bb06e018c43fc204428361ee9fc25a1b2125c/pgvector-0.4.1-py3-none-any.whl", hash = "sha256:34bb4e99e1b13d08a2fe82dda9f860f15ddcd0166fbb25bffe15821cbfeb7362", size = 27086, upload-time = "2025-04-26T18:56:35.956Z" },
+]
+
+[[package]]
 name = "pillow"
 version = "12.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1876,6 +1915,19 @@ wheels = [
 ]
 
 [[package]]
+name = "psycopg"
+version = "3.2.12"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a8/77/c72d10262b872617e509a0c60445afcc4ce2cd5cd6bc1c97700246d69c85/psycopg-3.2.12.tar.gz", hash = "sha256:85c08d6f6e2a897b16280e0ff6406bef29b1327c045db06d21f364d7cd5da90b", size = 160642, upload-time = "2025-10-26T00:46:03.045Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c8/28/8c4f90e415411dc9c78d6ba10b549baa324659907c13f64bfe3779d4066c/psycopg-3.2.12-py3-none-any.whl", hash = "sha256:8a1611a2d4c16ae37eada46438be9029a35bb959bb50b3d0e1e93c0f3d54c9ee", size = 206765, upload-time = "2025-10-26T00:10:42.173Z" },
+]
+
+[[package]]
 name = "pycparser"
 version = "2.23"
 source = { registry = "https://pypi.org/simple" }
@@ -2012,6 +2064,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/80/be/97b83a464498a79103036bc74d1038df4a7ef0e402cfaf4d5e113fb14759/pyopenssl-25.3.0.tar.gz", hash = "sha256:c981cb0a3fd84e8602d7afc209522773b94c1c2446a3c710a75b06fe1beae329", size = 184073, upload-time = "2025-09-17T00:32:21.037Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d1/81/ef2b1dfd1862567d573a4fdbc9f969067621764fbb74338496840a1d2977/pyopenssl-25.3.0-py3-none-any.whl", hash = "sha256:1fda6fc034d5e3d179d39e59c1895c9faeaf40a79de5fc4cbbfbe0d36f4a77b6", size = 57268, upload-time = "2025-09-17T00:32:19.474Z" },
+]
+
+[[package]]
+name = "pypdf"
+version = "6.1.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/13/3d/b6ead84ee437444f96862beb68f9796da8c199793bed08e9397b77579f23/pypdf-6.1.3.tar.gz", hash = "sha256:8d420d1e79dc1743f31a57707cabb6dcd5b17e8b9a302af64b30202c5700ab9d", size = 5076271, upload-time = "2025-10-22T16:13:46.061Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fa/ed/494fd0cc1190a7c335e6958eeaee6f373a281869830255c2ed4785dac135/pypdf-6.1.3-py3-none-any.whl", hash = "sha256:eb049195e46f014fc155f566fa20e09d70d4646a9891164ac25fa0cbcfcdbcb5", size = 323863, upload-time = "2025-10-22T16:13:44.174Z" },
 ]
 
 [[package]]

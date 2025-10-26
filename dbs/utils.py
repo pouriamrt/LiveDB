@@ -16,3 +16,4 @@ class CustomChunking(SemanticChunking):
             chunked_documents_without_references.append(chunk)
             
         return chunked_documents_without_references
+    

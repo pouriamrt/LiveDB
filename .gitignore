@@ -20,3 +20,6 @@ pdfs/
 
 # Saved models
 models/
+
+# Test files
+test.py

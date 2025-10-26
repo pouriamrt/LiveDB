@@ -238,9 +238,9 @@ async def try_fetch_pmc_fulltext_pdf(pmid: Optional[str], pmcid: Optional[str]) 
             if data.get("full_text") is None:
                 return {"path": None, "license": None, "is_open_access": False}
             
-            save_dir = f"{config.PDF_DIR}/{pmcid}.pdf"
+            save_dir = f"{config.PDF_DIR}/{pmid if pmid else pmcid}.pdf"
             await save_text_as_pdf_async(data.get("full_text"), save_dir)
-            return {"path": save_dir, "license": data["license"], "is_open_access": data["is_open_access"]}
+            return {"path": [save_dir], "license": data["license"], "is_open_access": data["is_open_access"]}
 
         return {"path": paths, "license": lic, "is_open_access": True}
     except Exception as e:

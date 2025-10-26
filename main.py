@@ -5,6 +5,7 @@ from loguru import logger
 import sys
 from itertools import chain
 from livedb.CheckAbsModel import check_abs_model_async
+from dbs.IngestToDB import ingest_to_db_async
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -18,6 +19,7 @@ async def main():
     logger.info(f"Found {len(pmids)} PMIDs")
     
     records = await pubmed_efetch(pmids)
+    logger.info(f"Sample record: {records[0]}")
     logger.info(f"Found {len(records)} records")
     
     predictions = await tqdm_asyncio.gather(*[
@@ -31,6 +33,8 @@ async def main():
         final_pred = "no" if pred[0]['S_AB_pred'] == "no" else "yes"
         logger.info(f"PMID {records[i]['pmid']} - PMCID {records[i]['pmcid']} - Final prediction: {final_pred}")
         records[i]["final_pred"] = final_pred
+        for key, value in pred[0].items():
+            records[i][key] = value
     
     included_records = [rec for rec in records if rec.get("final_pred") == "yes"]
     logger.info(f"Included {len(included_records)} records out of {len(records)} total records")
@@ -40,7 +44,13 @@ async def main():
         for rec in included_records
     ], desc="Fetching full texts")
     
+    for i, rec in enumerate(included_records):
+        included_records[i]["fulltext_path"] = fulltexts[i].get("path")[0][0] if fulltexts[i].get("path") else None
+    
     logger.info(f"Found {len(fulltexts)} fulltexts")
+    
+    await ingest_to_db_async(included_records)
+    
     logger.info("Finished livedb")
 
 if __name__ == "__main__":
