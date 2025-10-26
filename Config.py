@@ -15,5 +15,14 @@ class Config(BaseModel):
     PMC_OA_SERVICE: str = "https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi"
     PDF_DIR: str = os.path.join(os.path.dirname(__file__), "pdfs")
     CHUNK_SIZE: int = 256 * 1024
+    MODEL_DIR: str = os.path.join(os.path.dirname(__file__), "models/saved_multitask_model")
+    MODEL_NAME: str = "gpt-4.1-mini"
+    PGVECTOR_URL: str = os.getenv("PGVECTOR_URL")
+    PGVECTOR_TABLE: str = os.getenv("PGVECTOR_TABLE")
+    PGVECTOR_CONTENTS_URL: str = os.getenv("PGVECTOR_CONTENTS_URL")
+    PGVECTOR_CONTENTS_TABLE: str = os.getenv("PGVECTOR_CONTENTS_TABLE")
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY")
+    
     
 config = Config()

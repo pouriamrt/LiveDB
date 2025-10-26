@@ -17,3 +17,6 @@ logs/
 
 # PDFs
 pdfs/
+
+# Saved models
+models/
