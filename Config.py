@@ -23,6 +23,20 @@ class Config(BaseModel):
     PGVECTOR_CONTENTS_TABLE: str = os.getenv("PGVECTOR_CONTENTS_TABLE")
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY")
-    
+    OPENALEX_BASE: str = "https://api.openalex.org/works"
+    OPENALEX_MAILTO: str = os.getenv("OPENALEX_MAILTO")
+    COMMON_HEADERS: dict[str, str] = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/129.0.0.0 Safari/537.36"
+        ),
+        "Accept": "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "DNT": "1",
+    }
+    HEADLESS: bool = True
     
 config = Config()

@@ -23,3 +23,6 @@ models/
 
 # Test files
 test.py
+
+# Cloudflare session
+.cf_session/
