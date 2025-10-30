@@ -4,8 +4,6 @@ import pandas as pd
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import arrow
 import aiofiles
-import os
-from tqdm.asyncio import tqdm_asyncio
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
 import re
