@@ -18,8 +18,21 @@ from Config import config
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
+# --- Prefect loguru sink ---
 os.makedirs("logs", exist_ok=True)
-log.add("logs/livedb.log", rotation="10 MB", retention="10 days")
+log.remove()
+log.add("logs/livedb.log", rotation="10 MB", retention="10 days", enqueue=True, backtrace=True, diagnose=False)
+
+def _prefect_loguru_sink(message):
+    try:
+        prlog = get_run_logger()
+        r = message.record
+        lvl_name = r["level"].name
+        prlog.log(lvl_name, r["message"])
+    except Exception:
+        sys.stderr.write(message + "\n")
+
+log.add(_prefect_loguru_sink, level="DEBUG")
 
 # -------------------- TASKS --------------------
 
@@ -83,13 +96,12 @@ async def livedb_flow(
     retmax: int = 10,
     max_records: int = 100,
 ):
-    logg = get_run_logger()
-    logg.info("Starting LiveDB ETL")
+    log.info("Starting LiveDB ETL")
 
     # ---- OpenAlex
     openalex_future = fetch_openalex_task.submit(query, start_day, days_back, max_records)
     openalex_records = openalex_future.result()
-    logg.info(f"OpenAlex records: {len(openalex_records)}")
+    log.info(f"OpenAlex records: {len(openalex_records)}")
 
     # classify concurrently
     cls_tasks_oa = [classify_record_task.submit(r) for r in openalex_records if r.get("abstract") and r.get("title")]
@@ -105,11 +117,11 @@ async def livedb_flow(
     # ---- PubMed / PMC
     pmids_future = pubmed_search_task.submit(query, start_day, days_back, retmax)
     pmids = pmids_future.result()
-    logg.info(f"PMIDs: {len(pmids)}")
+    log.info(f"PMIDs: {len(pmids)}")
 
     pmc_records_future = pubmed_fetch_task.submit(pmids)
     pmc_records = pmc_records_future.result()
-    logg.info(f"PMC metadata: {len(pmc_records)}")
+    log.info(f"PMC metadata: {len(pmc_records)}")
 
     cls_tasks_pmc = [classify_record_task.submit(r) for r in pmc_records if r.get("abstract") and r.get("title")]
     classified_pmc = [t.result() for t in cls_tasks_pmc]
@@ -126,11 +138,11 @@ async def livedb_flow(
     all_included = included_with_ft + [r for r in downloaded_openalex if r.get("fulltext_path")]
 
     total_fulltexts = sum(1 for r in all_included if r.get("fulltext_path"))
-    logg.info(f"Total fulltexts: {total_fulltexts} / {len(all_included)}")
+    log.info(f"Total fulltexts: {total_fulltexts} / {len(all_included)}")
 
     # ingest
     _ = ingest_task.submit(all_included).result()
-    logg.info("Finished LiveDB ETL")
+    log.info("Finished LiveDB ETL")
     return {"total_fulltexts": total_fulltexts, "total_records": len(all_included)}
 
 # local run
