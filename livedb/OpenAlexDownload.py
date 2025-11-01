@@ -12,6 +12,8 @@ from loguru import logger
 from typing import Optional, Dict, List
 
 
+BROWSER_SEM = asyncio.Semaphore(3) # limit concurrent browsers
+
 def abstract_from_inverted(inv: Optional[Dict[str, List[int]]]) -> Optional[str]:
     """
     Reconstruct plaintext abstract from OpenAlex-style abstract_inverted_index.
@@ -229,35 +231,21 @@ async def download_pdf_async(url: str, save_path: str, landing_url: str, timeout
             return save_path
 
         except Exception as e:
-            async with Stealth().use_async(async_playwright()) as p:
-                browser = await p.chromium.launch(headless=headless)
-                context = await browser.new_context(
-                    user_agent=config.COMMON_HEADERS["User-Agent"],
-                    java_script_enabled=True,
-                    ignore_https_errors=True,
-                )
-                try:
-                    page = await context.new_page()
-                    if landing_url:
-                        await asyncio.wait_for(
-                            page.goto(landing_url, wait_until="networkidle"), timeout=timeout
-                        )
-
-                    api_resp = await asyncio.wait_for(
-                        context.request.get(
-                            url,
-                            headers={
-                                "Referer": landing_url or "https://www.google.com/",
-                                "Accept": config.COMMON_HEADERS["Accept"],
-                                "Accept-Language": config.COMMON_HEADERS["Accept-Language"],
-                                "Accept-Encoding": config.COMMON_HEADERS["Accept-Encoding"],
-                            },
-                            max_redirects=3,
-                        ),
-                        timeout=timeout,
+            async with BROWSER_SEM:
+                async with Stealth().use_async(async_playwright()) as p:
+                    browser = await p.chromium.launch(headless=headless)
+                    context = await browser.new_context(
+                        user_agent=config.COMMON_HEADERS["User-Agent"],
+                        java_script_enabled=True,
+                        ignore_https_errors=True,
                     )
+                    try:
+                        page = await context.new_page()
+                        if landing_url:
+                            await asyncio.wait_for(
+                                page.goto(landing_url, wait_until="networkidle"), timeout=timeout
+                            )
 
-                    if not api_resp.ok:
                         api_resp = await asyncio.wait_for(
                             context.request.get(
                                 url,
@@ -266,48 +254,63 @@ async def download_pdf_async(url: str, save_path: str, landing_url: str, timeout
                                     "Accept": config.COMMON_HEADERS["Accept"],
                                     "Accept-Language": config.COMMON_HEADERS["Accept-Language"],
                                     "Accept-Encoding": config.COMMON_HEADERS["Accept-Encoding"],
-                                    "Range": "bytes=0-",
                                 },
                                 max_redirects=3,
                             ),
                             timeout=timeout,
                         )
-                        
-                    body = await api_resp.body()
-                    if not _looks_like_pdf(api_resp.headers.get("content-type"), body,
-                                          api_resp.headers.get("content-disposition"), str(api_resp.url)):
-                        def _is_pdf_response(r):
-                            ct = (r.headers.get("content-type") or "").lower()
-                            url_l = (str(r.url) or "").lower()
-                            return ("application/pdf" in ct) or url_l.endswith(".pdf")
 
-                        await page.bring_to_front()
-                        
-                        nav_target = (landing_url or (re.sub(r"/pdf(/|$)", r"/", url)))
-                        try:
-                            await page.goto(nav_target, wait_until="domcontentloaded")
-                        except Exception:
-                            pass
+                        if not api_resp.ok:
+                            api_resp = await asyncio.wait_for(
+                                context.request.get(
+                                    url,
+                                    headers={
+                                        "Referer": landing_url or "https://www.google.com/",
+                                        "Accept": config.COMMON_HEADERS["Accept"],
+                                        "Accept-Language": config.COMMON_HEADERS["Accept-Language"],
+                                        "Accept-Encoding": config.COMMON_HEADERS["Accept-Encoding"],
+                                        "Range": "bytes=0-",
+                                    },
+                                    max_redirects=3,
+                                ),
+                                timeout=timeout,
+                            )
+                            
+                        body = await api_resp.body()
+                        if not _looks_like_pdf(api_resp.headers.get("content-type"), body,
+                                            api_resp.headers.get("content-disposition"), str(api_resp.url)):
+                            def _is_pdf_response(r):
+                                ct = (r.headers.get("content-type") or "").lower()
+                                url_l = (str(r.url) or "").lower()
+                                return ("application/pdf" in ct) or url_l.endswith(".pdf")
 
-                        async with page.expect_response(_is_pdf_response, timeout=timeout * 1000) as waiter:
-                            await page.goto(url, wait_until="domcontentloaded")
-                        pdf_resp = await waiter.value
-                        body = await pdf_resp.body()
+                            await page.bring_to_front()
+                            
+                            nav_target = (landing_url or (re.sub(r"/pdf(/|$)", r"/", url)))
+                            try:
+                                await page.goto(nav_target, wait_until="domcontentloaded")
+                            except Exception:
+                                pass
 
-                        if not _looks_like_pdf(
-                            pdf_resp.headers.get("content-type"),
-                            body,
-                            pdf_resp.headers.get("content-disposition"),
-                            str(pdf_resp.url),
-                        ):
-                            logger.error("Playwright fetched non-PDF content after CF fallback")
+                            async with page.expect_response(_is_pdf_response, timeout=timeout * 1000) as waiter:
+                                await page.goto(url, wait_until="domcontentloaded")
+                            pdf_resp = await waiter.value
+                            body = await pdf_resp.body()
 
-                    async with aiofiles.open(save_path, "wb") as f:
-                        await f.write(body)
-                    return save_path
-                except Exception as e:
-                    logger.error(f"Error downloading PDF from {url}: {e}")
-                finally:
-                    await context.close()
-                    await browser.close()
+                            if not _looks_like_pdf(
+                                pdf_resp.headers.get("content-type"),
+                                body,
+                                pdf_resp.headers.get("content-disposition"),
+                                str(pdf_resp.url),
+                            ):
+                                logger.error("Playwright fetched non-PDF content after CF fallback")
+
+                        async with aiofiles.open(save_path, "wb") as f:
+                            await f.write(body)
+                        return save_path
+                    except Exception as e:
+                        logger.error(f"Error downloading PDF from {url}: {e}")
+                    finally:
+                        await context.close()
+                        await browser.close()
 

@@ -17,6 +17,8 @@ from Config import config
 # --- optional: Windows async policy
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    
+DOWNLOAD_SEM = asyncio.Semaphore(8) # limit concurrent downloads to 8
 
 # --- Prefect loguru sink ---
 os.makedirs("logs", exist_ok=True)
@@ -60,9 +62,10 @@ async def classify_record_task(rec: Dict[str, Any]) -> Dict[str, Any]:
 
 @task(name="Download OpenAlex PDF", retries=2, retry_delay_seconds=30, timeout_seconds=900)
 async def download_openalex_pdf_task(rec: Dict[str, Any]) -> Dict[str, Any]:
-    target = os.path.join(config.PDF_DIR, f"{rec.get('pmid') or rec['id'].split('/')[-1]}.pdf")
-    path = await download_pdf_async(rec["oa_pdf"], target, rec["id"], headless=config.HEADLESS)
-    rec["fulltext_path"] = path
+    async with DOWNLOAD_SEM:
+        target = os.path.join(config.PDF_DIR, f"{rec.get('pmid') or rec['id'].split('/')[-1]}.pdf")
+        path = await download_pdf_async(rec["oa_pdf"], target, rec["id"], headless=config.HEADLESS)
+        rec["fulltext_path"] = path
     return rec
 
 @task(name="PubMed Search", retries=2, retry_delay_seconds=15, cache_key_fn=task_input_hash, cache_expiration=timedelta(hours=1))
@@ -93,58 +96,52 @@ async def livedb_flow(
     query: str = "dementia",
     start_day: int = 30,
     days_back: int = 1,
-    retmax: int = 10,
-    max_records: int = 100,
+    max_records: int = 10,
 ):
     log.info("Starting LiveDB ETL")
 
-    # ---- OpenAlex
-    openalex_future = fetch_openalex_task.submit(query, start_day, days_back, max_records)
-    openalex_records = openalex_future.result()
-    log.info(f"OpenAlex records: {len(openalex_records)}")
+    # Kick off OA + PubMed concurrently
+    oa_fut    = fetch_openalex_task(query, start_day, days_back, max_records)
+    pmids_fut = pubmed_search_task(query, start_day, days_back, max_records)
 
-    # classify concurrently
-    cls_tasks_oa = [classify_record_task.submit(r) for r in openalex_records if r.get("abstract") and r.get("title")]
-    classified_openalex = [t.result() for t in cls_tasks_oa]
+    openalex_records, pmids = await asyncio.gather(oa_fut, pmids_fut)
+    log.info(f"OpenAlex records: {len(openalex_records)} | PMIDs: {len(pmids)}")
+
+    # Classify OA concurrently
+    cls_tasks_oa = [classify_record_task(r)
+                    for r in openalex_records if r.get("abstract") and r.get("title")]
+    classified_openalex = await asyncio.gather(*cls_tasks_oa)
     included_openalex = [r for r in classified_openalex if r.get("final_pred") == "yes"]
 
-    # download PDFs concurrently
-    dl_tasks = [download_openalex_pdf_task.submit(r) for r in included_openalex]
-    downloaded_openalex = [t.result() for t in dl_tasks]
-    # keep those that failed download for PMC fallback
+    # Download OA PDFs with bounded concurrency
+    dl_tasks = [download_openalex_pdf_task(r) for r in included_openalex]
+    downloaded_openalex = await asyncio.gather(*dl_tasks)
     not_included_from_oa = [r for r in downloaded_openalex if not r.get("fulltext_path")]
 
-    # ---- PubMed / PMC
-    pmids_future = pubmed_search_task.submit(query, start_day, days_back, retmax)
-    pmids = pmids_future.result()
-    log.info(f"PMIDs: {len(pmids)}")
+    # PubMed EFetch + classify
+    pmc_records = await pubmed_fetch_task(pmids)
+    cls_tasks_pmc = [classify_record_task(r)
+                     for r in pmc_records if r.get("abstract") and r.get("title")]
+    classified_pmc = await asyncio.gather(*cls_tasks_pmc)
 
-    pmc_records_future = pubmed_fetch_task.submit(pmids)
-    pmc_records = pmc_records_future.result()
-    log.info(f"PMC metadata: {len(pmc_records)}")
-
-    cls_tasks_pmc = [classify_record_task.submit(r) for r in pmc_records if r.get("abstract") and r.get("title")]
-    classified_pmc = [t.result() for t in cls_tasks_pmc]
-
-    # combine (PMC + OA that missed PDF) and include only yes
+    # Combine; keep only "yes"
     combined = classified_pmc + not_included_from_oa
     included = [r for r in combined if r.get("final_pred") == "yes"]
 
-    # fetch PMC fulltexts
-    ft_tasks = [fetch_pmc_fulltext_task.submit(r) for r in included]
-    included_with_ft = [t.result() for t in ft_tasks]
+    # Fetch PMC fulltexts
+    ft_tasks = [fetch_pmc_fulltext_task(r) for r in included]
+    included_with_ft = await asyncio.gather(*ft_tasks)
 
-    # merge with OA that already have PDFs
+    # Merge with OA successes
     all_included = included_with_ft + [r for r in downloaded_openalex if r.get("fulltext_path")]
-
     total_fulltexts = sum(1 for r in all_included if r.get("fulltext_path"))
     log.info(f"Total fulltexts: {total_fulltexts} / {len(all_included)}")
 
-    # ingest
-    _ = ingest_task.submit(all_included).result()
+    # Ingest
+    await ingest_task(all_included)
     log.info("Finished LiveDB ETL")
     return {"total_fulltexts": total_fulltexts, "total_records": len(all_included)}
 
 # local run
 if __name__ == "__main__":
-    asyncio.run(livedb_flow())
+    asyncio.run(livedb_flow(query="dementia", max_records=10))
