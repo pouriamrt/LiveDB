@@ -26,3 +26,6 @@ test.py
 
 # Cloudflare session
 .cf_session/
+
+# agent ui
+agent-ui/

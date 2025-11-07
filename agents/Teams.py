@@ -31,11 +31,12 @@ def initialize_team(session_state: dict) -> Team:
             "If the user asks something that was asked before, utilize remembered information instead of starting fresh.",
             "Continue delegating and researching until the query is fully answered.",
             "Only if the user asks to reason, use ReasoningAgent based on the answer of the other agents.",
-            "Avoid mentioning the function calls in the final response and make the final response beautifully formatted as well."
+            "Avoid mentioning the function calls in the final response and make the final response beautifully formatted as well.",
+            "Write the final response in a nice and beautiful format with sections and inline citations and references."
         ],
         db=memory_db,
         session_state=session_state,
-        expected_output="The user's query has been thoroughly answered with information from all relevant agents.",
+        expected_output="The user's query has been thoroughly answered with information from all relevant agents in a nice and beautiful format with sections and inline citations and references.",
         enable_agentic_state=True,      # The coordinator retains its own context between turns
         share_member_interactions=True, # All agents see each other's outputs as context
         enable_agentic_memory=True,

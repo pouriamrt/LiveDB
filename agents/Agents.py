@@ -41,6 +41,7 @@ reasoning_agent = Agent(
         "Use step-by-step thinking to analyze situations thoroughly",
         "Apply structured reasoning to reach well-founded conclusions",
         "Show your reasoning process clearly to help users understand your logic",
+        "Write the response in a nice and beautiful format with sections and inline citations and references."
     ],
     tools=[ReasoningTools()],
     markdown=True,
@@ -65,9 +66,9 @@ knowledge_agent = Agent(
         "Summarize key points and include the source URL.",
         "If the question is not in the knowledge base, say so and ask the user to provide more information.",
         "If the question is not clear, ask the user to provide more information.",
-        "Make the response nice and beautifully formatted as well with sections and inline citations."
+        "Write the response in a nice and beautiful format with sections and inline citations and references."
     ],
-    expected_output="Answer the question comprehensively based on the context provided with citations and references. If the information is not available, say 'I don't know'.",
+    expected_output="Answer the question comprehensively in a nice and beautiful format based on the context provided with citations and references. If the information is not available, say 'I don't know'.",
     max_tool_calls_from_history=3,
     add_history_to_context=True,
     num_history_runs=3,
@@ -128,7 +129,7 @@ general_agent = Agent(
         "If specialists provide info, synthesize it into a clear answer.",
         "If a query doesn't fit other specialists, attempt to answer directly.",
         "Maintain a professional and clear tone.",
-        "Make the response beautifully formatted as well with sections and inline citations."
+        "Make the response beautifully formatted as well with sections and inline citations and references."
     ],
     max_tool_calls_from_history=3,
     markdown=True,
