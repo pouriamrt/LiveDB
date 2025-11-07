@@ -144,4 +144,23 @@ async def livedb_flow(
 
 # local run
 if __name__ == "__main__":
-    asyncio.run(livedb_flow(query="dementia", max_records=10))
+    from rich.prompt import Prompt
+    from rich.console import Console
+    from rich.panel import Panel
+
+    console = Console()
+    
+    console.print(Panel("[1] ETL\n[2] AI Agent", title="Run Mode"))
+
+    c = Prompt.ask("Choice", choices=["1","2"], show_choices=False)
+
+    if c == "1":
+        asyncio.run(livedb_flow(query="dementia", max_records=10))
+    else:
+        from agents.RunTeam import run_team
+        
+        session_state = {}
+        agent_os, app = run_team(session_state)
+        agent_os.serve(app=app, port=7777)
+        console.print(Panel("Agent server stopped", title="Run Mode"))
+    

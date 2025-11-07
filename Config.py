@@ -21,6 +21,7 @@ class Config(BaseModel):
     PGVECTOR_TABLE: str = os.getenv("PGVECTOR_TABLE")
     PGVECTOR_CONTENTS_URL: str = os.getenv("PGVECTOR_CONTENTS_URL")
     PGVECTOR_CONTENTS_TABLE: str = os.getenv("PGVECTOR_CONTENTS_TABLE")
+    SQL_DATABASE_URL: str = os.getenv("SQL_DATABASE_URL")
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY")
     OPENALEX_BASE: str = "https://api.openalex.org/works"
@@ -38,5 +39,7 @@ class Config(BaseModel):
         "DNT": "1",
     }
     HEADLESS: bool = True
+    PGVECTOR_MEMORY_URL: str = os.getenv("PGVECTOR_MEMORY_URL")
+    PGVECTOR_MEMORY_TABLE: str = os.getenv("PGVECTOR_MEMORY_TABLE")
     
 config = Config()

@@ -1,8 +1,6 @@
 # LiveDB ETL — Continuous Literature Ingestion, Triage, and Vectorized Indexing
 
-A production‑ready async pipeline that **discovers the latest biomedical papers**, **classifies abstracts for PICOS‑style eligibility**, **acquires legal full‑text (PDF or BioC fallback)**, and **ingests chunked content into a pgvector‑backed knowledge base** for retrieval‑augmented applications.
-
-> **Status:** Agents for orchestration/QA are **in development** (see “Agents (Planned)” below). The current system focuses on acquisition, triage, and indexing.
+A production-ready async pipeline that **discovers the latest biomedical papers**, **classifies abstracts for PICOS-style eligibility**, **acquires legal full-text (PDF or BioC fallback)**, **ingests chunked content into a pgvector-backed knowledge base**, **and exposes a multi-agent research assistant layer (Knowledge / SQL / Reasoning / General) coordinated via Agno Team/AgentOS** for retrieval-augmented applications and interactive post-indexing querying.
 
 ---
 
@@ -30,7 +28,9 @@ A production‑ready async pipeline that **discovers the latest biomedical paper
   - [Performance Tuning](#performance-tuning)
   - [Troubleshooting](#troubleshooting)
 - [Security & Compliance Notes](#security--compliance-notes)
-- [Agents (Planned)](#agents-planned)
+- [Agents](#agents)
+  - [Coordination](#coordination)
+  - [Shared Runtime](#shared-runtime)
 - [Roadmap](#roadmap)
 - [FAQ](#faq)
 - [License](#license)
@@ -40,13 +40,14 @@ A production‑ready async pipeline that **discovers the latest biomedical paper
 
 ## Overview
 
-**LiveDB ETL** continuously surfaces recent literature for a given query (e.g., *“dementia”*), performs **eligibility triage** using a fine‑tuned multi‑head classifier over a transformer encoder, **downloads or reconstructs full‑text**, and **indexes** results into a Postgres/pgvector‑backed knowledge base wrapped by **Agno** abstractions (vector DB + contents DB).
+**LiveDB ETL** continuously surfaces recent literature for a given query (e.g., *“dementia”*), performs **eligibility triage** using a fine-tuned multi-head classifier over a transformer encoder, **downloads or reconstructs full-text**, **indexes** results into a Postgres/pgvector-backed knowledge base wrapped by **Agno** abstractions (vector DB + contents DB), **and then exposes that indexed corpus through a multi-agent research assistant layer** (Knowledge / SQL / Reasoning / General) coordinated via Agno `Team` + `AgentOS`.
 
 It is designed to be:
 - **Asynchronous & resilient** (httpx, asyncio, tenacity retries; bounded concurrency for downloads)
 - **Legally compliant** (Open Access first; BioC fallback; PMC OA FTP for licensed content)
-- **RAG‑ready** (semantic chunking; reference removal; pgvector hybrid search)
+- **RAG-ready** (semantic chunking; reference removal; pgvector hybrid search)
 - **Operable** (Prefect orchestration, structured logging, configurable concurrency)
+- **Agentic** (specialist agents + coordinator for interactive post-indexing querying)
 
 ---
 
@@ -67,10 +68,13 @@ It is designed to be:
   - **Agno** Knowledge layer → Postgres/pgvector for hybrid retrieval + separate contents store.
 - **Orchestration & Observability**
   - **Prefect** flow with caching, retries, bounded concurrency, and rotating log files.
+- **Agentic post-indexing interface**
+  - 4 specialist agents (**Knowledge / SQL / Reasoning / General**) coordinated via Agno `Team` + `AgentOS`.
+  - Makes the ingested corpus queryable immediately after ingestion (RAG-style, but without re-fetching PDFs).
 
 ---
 
-## Architecture
+## Architecture (ETL)
 
 ```
                 ┌──────────────────────────────────────────────────────────┐
@@ -128,13 +132,20 @@ It is designed to be:
    - **CustomChunking** removes everything after a “References” sentinel.
    - Metadata (year, authors, journal, P/I/C/O/S flags, etc.) is stored alongside embedded chunks in **pgvector** and **contents** tables.
 
+5. **QA**
+   - **Agno** `Knowledge` layer provides hybrid search + contents Postgres for retrieval.
+   - **ResearchAssistantTeam** coordinates specialist agents (Knowledge, SQL, Reasoning, General) for complex queries.
+   - Shared memory/state between coordinator and agents; conversational history enabled.
+
 ---
 
 ## Repository Layout
 
 ```
 agents/
-  agents.py				 # (in development) — autonomous AI agents that will operate on top of the pgvector KB (retrieval, maintenance, QA, and smart acquisition logic)
+  Agents.py              # single-agent definitions & entrypoints
+  RunTeam.py             # orchestrates multi-agent execution (Team run)
+  Teams.py               # team definitions, roles, routing rules / topology
 dbs/
   IngestToDB.py          # Agno Knowledge setup + async ingestion
   utils.py               # CustomChunking (SemanticChunking subclass)
@@ -331,13 +342,42 @@ You should provision:
 
 ---
 
-## Agents (Planned)
+## Agents
 
-Work in progress (not yet included in this repository build):
-- **Quality‑Assurance Agent** to validate metadata completeness per document (P/I/C/O/S rationale, trial design cues)
-- **Acquisition Agent** to retry failed sources with site‑specific policies (e.g., pre‑prints)
-- **Index Maintenance Agent** to deduplicate, re‑embed with upgraded models, and archive superseded versions
-- **Query Assistant** for retrieval‑augmented answers with structured provenance
+This build includes a coordinator team with four specialist agents and shared state/backends:
+
+- **KnowledgeAgent**
+  - Uses a `Knowledge` base backed by **PgVector** (hybrid search) and a contents Postgres store.
+  - Embeddings via OpenAI (`config.EMBEDDING_MODEL`).
+  - Produces sectioned answers with inline citations; says “I don’t know” when context is missing.
+
+- **SQLAgent**
+  - Uses `PostgresTools` (parsed from `config.SQL_DATABASE_URL`) to inspect schema, preview rows, and run queries.
+  - Guidance enforces safe exploration (schema-first, small `LIMIT`s; avoid destructive statements).
+  - Explains which tables/columns were used.
+
+- **ReasoningAgent**
+  - Structured, stepwise analysis with `ReasoningTools`.
+  - Decomposes problems and returns concise rationales.
+
+- **GeneralAgent**
+  - Handles broad queries or synthesizes outputs from other agents into a single response.
+
+### Coordination
+
+- **ResearchAssistantTeam** (coordinator)
+  - Routes by intent: Knowledge → *KnowledgeAgent*; SQL → *SQLAgent*; Reasoning → *ReasoningAgent*; otherwise → *GeneralAgent*.
+  - Aggregates members’ findings into one coherent answer with clickable citations.
+  - Shares interactions among members for context; leverages conversation memory.
+  - Agent runtime exposed via `AgentOS` (`run_team(session_state)` returns `(AgentOS, FastAPI app)`).
+
+### Shared Runtime
+
+- **Model:** `OpenAIChat(id=config.MODEL_NAME)`
+- **Memory:** Postgres (`config.PGVECTOR_MEMORY_URL`, table `config.PGVECTOR_MEMORY_TABLE`)
+- **Vector DB:** PgVector (`config.PGVECTOR_TABLE`, `config.PGVECTOR_URL`, hybrid search)
+- **Contents DB:** Postgres (`config.PGVECTOR_CONTENTS_URL`, table `config.PGVECTOR_CONTENTS_TABLE`)
+- **Common Settings:** Markdown outputs, chat history enabled, shared context (`num_history_runs≈4`), exponential backoff.
 
 ---
 
@@ -373,7 +413,7 @@ Set `HEADLESS=True` (default) and rely on httpx first; if you remove Playwright 
 
 ## License
 
-Choose a license that fits your needs (e.g., MIT, Apache‑2.0). Place it as `LICENSE` in the repo root.
+This project is licensed under the **MIT License**.
 
 ---
 
@@ -381,9 +421,8 @@ Choose a license that fits your needs (e.g., MIT, Apache‑2.0). Place it as `LI
 
 - **OpenAlex** — community‑maintained index of scholarly works  
 - **NCBI E‑utils / PubMed / PMC OA** — programmatic biomedical literature access  
-- **Agno** — abstraction layer for knowledge bases with pgvector  
+- **Agno** — abstraction layer for: Postgres-backed knowledge, pgvector hybrid search, agent memory, and team orchestration   
 - **pgvector** — high‑dimensional vector similarity for Postgres  
 - **Playwright** and **playwright‑stealth** — browser automation for bot‑gated flows  
 - **ReportLab** — PDF generation for BioC text fallback
 
-If you publish using this pipeline, consider acknowledging these services.
