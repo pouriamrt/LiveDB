@@ -15,20 +15,22 @@ logger.info("Agents initialized")
 model = OpenAIChat(id=config.MODEL_NAME, api_key=config.OPENAI_API_KEY)
 
 contents_db = PostgresDb(
-    db_url=config.PGVECTOR_CONTENTS_URL,
-    knowledge_table=config.PGVECTOR_CONTENTS_TABLE
+    db_url=config.PGVECTOR_CONTENTS_URL, knowledge_table=config.PGVECTOR_CONTENTS_TABLE
 )
 
-vector_db=PgVector(table_name=config.PGVECTOR_TABLE, db_url=config.PGVECTOR_URL, search_type=SearchType.hybrid, 
-                       embedder=OpenAIEmbedder(id=config.EMBEDDING_MODEL, api_key=config.OPENAI_API_KEY))
-
-
-knowledge_base = Knowledge(
-    vector_db=vector_db,
-    contents_db=contents_db
+vector_db = PgVector(
+    table_name=config.PGVECTOR_TABLE,
+    db_url=config.PGVECTOR_URL,
+    search_type=SearchType.hybrid,
+    embedder=OpenAIEmbedder(id=config.EMBEDDING_MODEL, api_key=config.OPENAI_API_KEY),
 )
 
-memory_db = PostgresDb(db_url=config.PGVECTOR_MEMORY_URL, memory_table=config.PGVECTOR_MEMORY_TABLE)
+
+knowledge_base = Knowledge(vector_db=vector_db, contents_db=contents_db)
+
+memory_db = PostgresDb(
+    db_url=config.PGVECTOR_MEMORY_URL, memory_table=config.PGVECTOR_MEMORY_TABLE
+)
 
 # Reasoning Agent
 reasoning_agent = Agent(
@@ -41,7 +43,7 @@ reasoning_agent = Agent(
         "Use step-by-step thinking to analyze situations thoroughly",
         "Apply structured reasoning to reach well-founded conclusions",
         "Show your reasoning process clearly to help users understand your logic",
-        "Write the response in a nice and beautiful format with sections and inline citations and references."
+        "Write the response in a nice and beautiful format with sections and inline citations and references.",
     ],
     tools=[ReasoningTools()],
     markdown=True,
@@ -66,7 +68,7 @@ knowledge_agent = Agent(
         "Summarize key points and include the source URL.",
         "If the question is not in the knowledge base, say so and ask the user to provide more information.",
         "If the question is not clear, ask the user to provide more information.",
-        "Write the response in a nice and beautiful format with sections and inline citations and references."
+        "Write the response in a nice and beautiful format with sections and inline citations and references.",
     ],
     expected_output="Answer the question comprehensively in a nice and beautiful format based on the context provided with citations and references. If the information is not available, say 'I don't know'.",
     max_tool_calls_from_history=3,
@@ -90,7 +92,7 @@ postgres_tools = PostgresTools(
     port=u.port or 5432,
     db_name=u.path.lstrip("/"),
     user=unquote(u.username or ""),
-    password=unquote(u.password or "")
+    password=unquote(u.password or ""),
 )
 
 # SQL Agent
@@ -101,10 +103,10 @@ sql_agent = Agent(
     tools=[postgres_tools],
     description="You are a SQL agent that uses the postgres database to answer questions.",
     instructions=[
-        "Use the postgres database to answer questions.", 
+        "Use the postgres database to answer questions.",
         "Always check the database schema and first 2 rows of each table to decide which tables to use before running the query.",
         "If you encounter an error, try to fix it by checking the database schema and the first 2 rows of each table.",
-        "If the question is not clear, ask the user to provide more information."
+        "If the question is not clear, ask the user to provide more information.",
     ],
     expected_output="Answer the question comprehensively. If the information is not available, say 'I don't know'.",
     max_tool_calls_from_history=3,
@@ -129,11 +131,10 @@ general_agent = Agent(
         "If specialists provide info, synthesize it into a clear answer.",
         "If a query doesn't fit other specialists, attempt to answer directly.",
         "Maintain a professional and clear tone.",
-        "Make the response beautifully formatted as well with sections and inline citations and references."
+        "Make the response beautifully formatted as well with sections and inline citations and references.",
     ],
     max_tool_calls_from_history=3,
     markdown=True,
     exponential_backoff=True,
     # debug_mode=True
 )
-

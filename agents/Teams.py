@@ -1,15 +1,22 @@
-from Config import config
 from loguru import logger
-from agents.Agents import reasoning_agent, knowledge_agent, sql_agent, general_agent, memory_db, model
+from agents.Agents import (
+    reasoning_agent,
+    knowledge_agent,
+    sql_agent,
+    general_agent,
+    memory_db,
+    model,
+)
 from agno.team import Team
+
 
 def initialize_team(session_state: dict) -> Team:
     """Initializes or re-initializes the research assistant team."""
     logger.info("Teams initialized")
-    
+
     return Team(
         name="ResearchAssistantTeam",
-        model=model, 
+        model=model,
         members=[
             knowledge_agent,
             sql_agent,
@@ -32,23 +39,23 @@ def initialize_team(session_state: dict) -> Team:
             "Continue delegating and researching until the query is fully answered.",
             "Only if the user asks to reason, use ReasoningAgent based on the answer of the other agents.",
             "Avoid mentioning the function calls in the final response and make the final response beautifully formatted as well.",
-            "Write the final response in a nice and beautiful format with sections and inline citations and references."
+            "Write the final response in a nice and beautiful format with sections and inline citations and references.",
         ],
         db=memory_db,
         session_state=session_state,
         expected_output="The user's query has been thoroughly answered with information from all relevant agents in a nice and beautiful format with sections and inline citations and references.",
-        enable_agentic_state=True,      # The coordinator retains its own context between turns
-        share_member_interactions=True, # All agents see each other's outputs as context
+        enable_agentic_state=True,  # The coordinator retains its own context between turns
+        share_member_interactions=True,  # All agents see each other's outputs as context
         enable_agentic_memory=True,
         enable_user_memories=True,
         read_team_history=True,
-        show_members_responses=False,   # Do not show raw individual agents' answers directly to the user
+        show_members_responses=False,  # Do not show raw individual agents' answers directly to the user
         delegate_task_to_all_members=False,
         markdown=True,
         add_member_tools_to_context=True,
         add_memories_to_context=True,
-        add_history_to_context=True,    # Maintain a shared history (memory) between coordinator and members
-        num_history_runs=4,             # Limit how much history is shared (to last 3 interactions)
+        add_history_to_context=True,  # Maintain a shared history (memory) between coordinator and members
+        num_history_runs=4,  # Limit how much history is shared (to last 3 interactions)
         add_session_state_to_context=True,
         exponential_backoff=True,
         # debug_mode=True

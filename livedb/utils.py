@@ -11,7 +11,12 @@ async def save_text_as_pdf_async(
     output_path: str,
     *,
     page_size=letter,
-    margins: Tuple[float, float, float, float] = (72, 72, 72, 72),  # left, right, top, bottom (pt)
+    margins: Tuple[float, float, float, float] = (
+        72,
+        72,
+        72,
+        72,
+    ),  # left, right, top, bottom (pt)
     font_name: str = "Helvetica",
     font_size: int = 12,
     line_spacing: float = 1.3,  # multiplier on font_size
@@ -62,10 +67,9 @@ async def save_text_as_pdf_async(
                 c.drawString(left, y, line)
                 y -= line_h
             # paragraph spacing
-            y -= (line_h * 0.3)
+            y -= line_h * 0.3
 
         c.save()
 
     # Run blocking PDF generation in a worker thread
     await asyncio.to_thread(_sync_write)
-

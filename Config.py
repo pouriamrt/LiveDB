@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 load_dotenv(override=True)
 
+
 class Config(BaseModel):
     NCBI_EMAIL: str = os.getenv("NCBI_EMAIL")
     NCBI_API_KEY: str = os.getenv("NCBI_API_KEY")
@@ -15,7 +16,9 @@ class Config(BaseModel):
     PMC_OA_SERVICE: str = "https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi"
     PDF_DIR: str = os.path.join(os.path.dirname(__file__), "pdfs")
     CHUNK_SIZE: int = 256 * 1024
-    MODEL_DIR: str = os.path.join(os.path.dirname(__file__), "models/saved_multitask_model")
+    MODEL_DIR: str = os.path.join(
+        os.path.dirname(__file__), "models/saved_multitask_model"
+    )
     MODEL_NAME: str = "gpt-4.1-mini"
     PGVECTOR_URL: str = os.getenv("PGVECTOR_URL")
     PGVECTOR_TABLE: str = os.getenv("PGVECTOR_TABLE")
@@ -41,5 +44,6 @@ class Config(BaseModel):
     HEADLESS: bool = True
     PGVECTOR_MEMORY_URL: str = os.getenv("PGVECTOR_MEMORY_URL")
     PGVECTOR_MEMORY_TABLE: str = os.getenv("PGVECTOR_MEMORY_TABLE")
-    
+
+
 config = Config()

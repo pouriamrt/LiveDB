@@ -23,20 +23,24 @@ def eutils_params(extra: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=15))
-async def pubmed_esearch(query: str, days_back: int = 1, start_day: int = 30, retmax: int = 200) -> List[str]:
+async def pubmed_esearch(
+    query: str, days_back: int = 1, start_day: int = 30, retmax: int = 200
+) -> List[str]:
     """Use ESearch to find recent PMIDs (start_day to start_day + days_back), sorted by most recent."""
-    mindate = arrow.now().shift(days=-(start_day+days_back)).format("YYYY/MM/DD")
+    mindate = arrow.now().shift(days=-(start_day + days_back)).format("YYYY/MM/DD")
     maxdate = arrow.now().shift(days=-start_day).format("YYYY/MM/DD")
-    params = eutils_params({
-        "db": "pubmed",
-        "term": query,
-        "datetype": "edat",
-        "mindate": mindate,
-        "maxdate": maxdate,
-        "retmax": retmax,
-        "retmode": "json",
-        "sort": "most+recent",
-    })
+    params = eutils_params(
+        {
+            "db": "pubmed",
+            "term": query,
+            "datetype": "edat",
+            "mindate": mindate,
+            "maxdate": maxdate,
+            "retmax": retmax,
+            "retmode": "json",
+            "sort": "most+recent",
+        }
+    )
     url = f"{config.BASE_EUTILS}/esearch.fcgi?{urlencode(params)}"
 
     async with httpx.AsyncClient(timeout=30) as client:
@@ -53,11 +57,13 @@ async def pubmed_efetch(pmids: List[str]) -> List[Dict[str, Any]]:
     if not pmids:
         return []
 
-    params = eutils_params({
-        "db": "pubmed",
-        "id": ",".join(pmids),
-        "retmode": "xml",
-    })
+    params = eutils_params(
+        {
+            "db": "pubmed",
+            "id": ",".join(pmids),
+            "retmode": "xml",
+        }
+    )
     url = f"{config.BASE_EUTILS}/efetch.fcgi"
 
     async with httpx.AsyncClient(timeout=60) as client:
@@ -68,6 +74,7 @@ async def pubmed_efetch(pmids: List[str]) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
 
     for article in root.xpath("//PubmedArticle"):
+
         def x(path):
             el = article.xpath(path)
             return el[0].text if el else None
@@ -77,7 +84,12 @@ async def pubmed_efetch(pmids: List[str]) -> List[Dict[str, Any]]:
         title = x(".//ArticleTitle")
         journal = x(".//Journal/Title")
         year = x(".//JournalIssue/PubDate/Year")
-        abstract = " ".join([t.text for t in article.xpath(".//Abstract/AbstractText") if t.text]) or None
+        abstract = (
+            " ".join(
+                [t.text for t in article.xpath(".//Abstract/AbstractText") if t.text]
+            )
+            or None
+        )
         url_article = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/" if pmid else None
         pmcid = x(".//ArticleIdList/ArticleId[@IdType='pmc']")
 
@@ -89,22 +101,26 @@ async def pubmed_efetch(pmids: List[str]) -> List[Dict[str, Any]]:
                 names.append(f"{last_el.text} {ini_el.text}")
         authors = ", ".join(names) if names else None
 
-        out.append({
-            "pmid": pmid,
-            "pmcid": pmcid,
-            "doi": doi,
-            "title": title,
-            "journal": journal,
-            "pub_year": int(year) if year and year.isdigit() else None,
-            "authors": authors,
-            "url": url_article,
-            "abstract": abstract,
-        })
+        out.append(
+            {
+                "pmid": pmid,
+                "pmcid": pmcid,
+                "doi": doi,
+                "title": title,
+                "journal": journal,
+                "pub_year": int(year) if year and year.isdigit() else None,
+                "authors": authors,
+                "url": url_article,
+                "abstract": abstract,
+            }
+        )
     return out
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=15))
-async def try_fetch_pmc_fulltext(pmid: Optional[str], pmcid: Optional[str]) -> Dict[str, Any]:
+async def try_fetch_pmc_fulltext(
+    pmid: Optional[str], pmcid: Optional[str]
+) -> Dict[str, Any]:
     """
     Use BioC PMC OA endpoint for legal full text when available.
     Returns dict: {full_text, license, is_open_access}
@@ -125,14 +141,24 @@ async def try_fetch_pmc_fulltext(pmid: Optional[str], pmcid: Optional[str]) -> D
         root = etree.fromstring(r.content)
         sections = root.xpath("//passage/infon[@key='section_type']")
         passages = root.xpath("//passage/text")
-        text_content = "\n\n".join([s.text + "\n" + p.text for s, p in zip(sections, passages) if p is not None and p.text])
+        text_content = "\n\n".join(
+            [
+                s.text + "\n" + p.text
+                for s, p in zip(sections, passages)
+                if p is not None and p.text
+            ]
+        )
 
         lic = None
         inf = root.xpath("//document/infon[@key='license']")
         if inf and inf[0].text:
             lic = inf[0].text
 
-        return {"full_text": text_content or None, "license": lic, "is_open_access": True}
+        return {
+            "full_text": text_content or None,
+            "license": lic,
+            "is_open_access": True,
+        }
     except Exception:
         return {"full_text": None, "license": None, "is_open_access": False}
 
@@ -144,8 +170,12 @@ async def extract_pdfs_from_tar_async(tar_path: str, output_dir: str) -> List[st
         extracted: List[str] = []
         with tarfile.open(tar_path, "r:gz") as tar:
             for member in tar.getmembers():
-                if member.isfile() and member.name.lower().endswith(".pdf") and "s00" not in member.name:
-                    basename = os.path.dirname(member.name) + '.pdf'
+                if (
+                    member.isfile()
+                    and member.name.lower().endswith(".pdf")
+                    and "s00" not in member.name
+                ):
+                    basename = os.path.dirname(member.name) + ".pdf"
                     src = tar.extractfile(member)
                     if src is None:
                         continue
@@ -154,11 +184,14 @@ async def extract_pdfs_from_tar_async(tar_path: str, output_dir: str) -> List[st
                         out.write(src.read())
                     extracted.append(out_path)
         return extracted
+
     return await asyncio.to_thread(_extract_sync)
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=15))
-async def download_pdf_ftp(url: str, *, dest_dir: Optional[str] = None, chunk_size: int = 256*1024) -> List[str]:
+async def download_pdf_ftp(
+    url: str, *, dest_dir: Optional[str] = None, chunk_size: int = 256 * 1024
+) -> List[str]:
     """
     Download a PMC OA FTP URL.
     - If URL points to a .tar.gz (oa_package), download then extract PDFs and return their paths.
@@ -166,7 +199,7 @@ async def download_pdf_ftp(url: str, *, dest_dir: Optional[str] = None, chunk_si
     """
     dest_dir_pdfs = dest_dir or config.PDF_DIR
     os.makedirs(dest_dir_pdfs, exist_ok=True)
-    dest_dir = dest_dir_pdfs + '/zips'
+    dest_dir = dest_dir_pdfs + "/zips"
     os.makedirs(dest_dir, exist_ok=True)
 
     parsed = urlparse(url)
@@ -174,10 +207,10 @@ async def download_pdf_ftp(url: str, *, dest_dir: Optional[str] = None, chunk_si
         raise ValueError(f"Expected ftp:// URL, got: {url}")
 
     host = parsed.hostname or config.FTP_HOST
-    remote_path = parsed.path                   # e.g. /pub/pmc/oa_package/00/00/PMC1790863.tar.gz
+    remote_path = parsed.path  # e.g. /pub/pmc/oa_package/00/00/PMC1790863.tar.gz
     remote_dir, remote_name = os.path.split(remote_path)
     local_path = os.path.join(dest_dir, remote_name)
-    
+
     async with aioftp.Client.context(
         host,
         user=getattr(config, "FTP_USER", "anonymous"),
@@ -201,7 +234,9 @@ async def download_pdf_ftp(url: str, *, dest_dir: Optional[str] = None, chunk_si
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=15))
-async def try_fetch_pmc_fulltext_pdf(pmid: Optional[str], pmcid: Optional[str]) -> Dict[str, Any]:
+async def try_fetch_pmc_fulltext_pdf(
+    pmid: Optional[str], pmcid: Optional[str]
+) -> Dict[str, Any]:
     """
     Use FTP to fetch PDF full text when available.
     Save PDF to local directory.
@@ -223,26 +258,33 @@ async def try_fetch_pmc_fulltext_pdf(pmid: Optional[str], pmcid: Optional[str]) 
         root = etree.fromstring(r.content)
         records = root.xpath("//records/record")
         lic = records[0].xpath("./@license")[0]
-        urls = [record.xpath("./link/@href")[0] for record in records if record.xpath("./link/@href")]
+        urls = [
+            record.xpath("./link/@href")[0]
+            for record in records
+            if record.xpath("./link/@href")
+        ]
         if not urls:
             return {"path": None, "license": None, "is_open_access": False}
-        
+
     except Exception as e:
         return {"path": None, "license": None, "is_open_access": False, "error": str(e)}
-    
+
     try:
         paths = await asyncio.gather(*[download_pdf_ftp(url) for url in urls])
-        
+
         if len(paths[0]) < 1:
             data = await try_fetch_pmc_fulltext(pmid, pmcid)
             if data.get("full_text") is None:
                 return {"path": None, "license": None, "is_open_access": False}
-            
+
             save_dir = f"{config.PDF_DIR}/{pmid if pmid else pmcid}.pdf"
             await save_text_as_pdf_async(data.get("full_text"), save_dir)
-            return {"path": [save_dir], "license": data["license"], "is_open_access": data["is_open_access"]}
+            return {
+                "path": [save_dir],
+                "license": data["license"],
+                "is_open_access": data["is_open_access"],
+            }
 
         return {"path": paths, "license": lic, "is_open_access": True}
     except Exception as e:
         return {"path": None, "license": None, "is_open_access": False, "error": str(e)}
-    

@@ -12,13 +12,17 @@ LABELS = ["no", "maybe", "yes"]
 TASKS = ["P_AB", "I_AB", "C_AB", "O_AB", "S_AB"]
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+
 class MeanPooling(nn.Module):
-    def __init__(self): super().__init__()
+    def __init__(self):
+        super().__init__()
+
     def forward(self, last_hidden_state, attention_mask):
         mask = attention_mask.unsqueeze(-1).type_as(last_hidden_state)
         summed = (last_hidden_state * mask).sum(dim=1)
         counts = mask.sum(dim=1).clamp(min=1e-9)
         return summed / counts
+
 
 class MultiHeadClassifier(nn.Module):
     def __init__(self, base_model_name: str, num_tasks: int, num_classes: int):
@@ -27,10 +31,14 @@ class MultiHeadClassifier(nn.Module):
         hidden = self.encoder.config.hidden_size
         self.dropout = nn.Dropout(0.1)
         # one head per task
-        self.heads = nn.ModuleList([nn.Linear(hidden, num_classes) for _ in range(num_tasks)])
+        self.heads = nn.ModuleList(
+            [nn.Linear(hidden, num_classes) for _ in range(num_tasks)]
+        )
 
     def forward(self, input_ids, attention_mask, labels=None):
-        out = self.encoder(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        out = self.encoder(
+            input_ids=input_ids, attention_mask=attention_mask
+        ).last_hidden_state
         cls = self.dropout(out[:, 0, :])  # [CLS]-like first token for DistilBERT
         logits = [head(cls) for head in self.heads]
         if labels is not None:
@@ -43,19 +51,27 @@ class MultiHeadClassifier(nn.Module):
         else:
             return {"logits": logits}
 
+
 # ----- reload -----
 LOAD_DIR = config.MODEL_DIR
 tokenizer = AutoTokenizer.from_pretrained(LOAD_DIR)
 base_model_name = LOAD_DIR
 
-model = MultiHeadClassifier(base_model_name, num_tasks=len(TASKS), num_classes=len(LABELS))
-state_dict = torch.load(os.path.join(LOAD_DIR, "classifier_heads.pt"), map_location="cpu")
+model = MultiHeadClassifier(
+    base_model_name, num_tasks=len(TASKS), num_classes=len(LABELS)
+)
+state_dict = torch.load(
+    os.path.join(LOAD_DIR, "classifier_heads.pt"), map_location="cpu"
+)
 model.load_state_dict(state_dict, strict=False)
 model.to(DEVICE)
 model.eval()
 logger.info("Model loaded and ready.")
 
-def check_abs_model(text: str, max_length: int = 512, device: str = "cpu") -> Tuple[List[List[int]], List[List[float]]]:
+
+def check_abs_model(
+    text: str, max_length: int = 512, device: str = "cpu"
+) -> Tuple[List[List[int]], List[List[float]]]:
     enc = tokenizer(
         [text],
         return_tensors="pt",
@@ -64,32 +80,37 @@ def check_abs_model(text: str, max_length: int = 512, device: str = "cpu") -> Tu
         max_length=max_length,
         return_token_type_ids=False,
     )
-    
+
     all_preds = [[] for _ in TASKS]
     all_confs = [[] for _ in TASKS]
-    
+
     enc = {k: v.to(device) for k, v in enc.items()}
-    
+
     with torch.no_grad():
         out = model(**enc)
         logits_list = out["logits"] if isinstance(out, dict) else out
         probs_list = [torch.softmax(logits, dim=-1) for logits in logits_list]
-        
+
         for t_idx in range(len(TASKS)):
             preds = probs_list[t_idx].argmax(dim=-1).tolist()
             confs = probs_list[t_idx].max(dim=-1).values.tolist()
             all_preds[t_idx].extend(preds)
             all_confs[t_idx].extend(confs)
-            
+
         del enc, out, logits_list, probs_list
         torch.cuda.empty_cache() if device.startswith("cuda") else None
-    
-    out_cols_labels = {f"{TASKS[t]}_pred": [LABELS[i] for i in all_preds[t]] for t in range(len(TASKS))}
-    out_cols_confs  = {f"{TASKS[t]}_conf": all_confs[t] for t in range(len(TASKS))}
-    
+
+    out_cols_labels = {
+        f"{TASKS[t]}_pred": [LABELS[i] for i in all_preds[t]] for t in range(len(TASKS))
+    }
+    out_cols_confs = {f"{TASKS[t]}_conf": all_confs[t] for t in range(len(TASKS))}
+
     return out_cols_labels, out_cols_confs
 
-async def check_abs_model_async(text: str, max_length: int = 512, device: str = "cpu") -> Tuple[List[List[int]], List[List[float]]]:
+
+async def check_abs_model_async(
+    text: str, max_length: int = 512, device: str = "cpu"
+) -> Tuple[List[List[int]], List[List[float]]]:
     return await asyncio.to_thread(check_abs_model, text, max_length, device)
 
 
@@ -121,6 +142,7 @@ async def main():
     """
     preds, confs = await check_abs_model_async(test_text)
     print(preds, confs)
-    
+
+
 if __name__ == "__main__":
     asyncio.run(main())
