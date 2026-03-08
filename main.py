@@ -87,7 +87,7 @@ async def classify_record_task(rec: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @task(
-    name="Download OpenAlex PDF", retries=2, retry_delay_seconds=30, timeout_seconds=900
+    name="Download OpenAlex PDF", retries=1, retry_delay_seconds=10, timeout_seconds=120
 )
 async def download_openalex_pdf_task(rec: Dict[str, Any]) -> Dict[str, Any]:
     async with DOWNLOAD_SEM:

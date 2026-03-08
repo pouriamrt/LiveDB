@@ -195,15 +195,15 @@ async def fetch_openalex_latest(
 
 
 @retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=0.5, min=0.5, max=10),
+    stop=stop_after_attempt(2),
+    wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
     reraise=True,
 )
 async def download_pdf_async(
     url: str,
     save_path: str,
     landing_url: str,
-    timeout: float = 20.0,
+    timeout: float = 15.0,
     headless: bool = True,
 ) -> str:
     """Asynchronously downloads a PDF file from the given URL and saves it to save_path."""
