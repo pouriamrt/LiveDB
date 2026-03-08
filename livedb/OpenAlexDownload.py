@@ -10,7 +10,7 @@ from tenacity import (
 import arrow
 import aiofiles
 from playwright.async_api import async_playwright
-from playwright_stealth import stealth_async
+from playwright_stealth import Stealth
 import re
 from Config import config
 from loguru import logger
@@ -289,8 +289,9 @@ async def download_pdf_async(
                         ignore_https_errors=True,
                     )
                     try:
+                        stealth = Stealth()
+                        await stealth.apply_stealth_async(context)
                         page = await context.new_page()
-                        await stealth_async(page)
                         if landing_url:
                             await asyncio.wait_for(
                                 page.goto(landing_url, wait_until="networkidle"),
