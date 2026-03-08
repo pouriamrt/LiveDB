@@ -145,7 +145,7 @@ async def try_fetch_pmc_fulltext(
             [
                 s.text + "\n" + p.text
                 for s, p in zip(sections, passages)
-                if p is not None and p.text
+                if s is not None and s.text and p is not None and p.text
             ]
         )
 
@@ -270,9 +270,10 @@ async def try_fetch_pmc_fulltext_pdf(
         return {"path": None, "license": None, "is_open_access": False, "error": str(e)}
 
     try:
-        paths = await asyncio.gather(*[download_pdf_ftp(url) for url in urls])
+        nested = await asyncio.gather(*[download_pdf_ftp(url) for url in urls])
+        paths = [p for sublist in nested for p in sublist]
 
-        if len(paths[0]) < 1:
+        if len(paths) < 1:
             data = await try_fetch_pmc_fulltext(pmid, pmcid)
             if data.get("full_text") is None:
                 return {"path": None, "license": None, "is_open_access": False}

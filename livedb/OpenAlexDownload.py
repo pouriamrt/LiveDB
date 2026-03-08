@@ -273,7 +273,7 @@ async def download_pdf_async(
                 response.headers.get("content-disposition"),
                 str(response.url),
             ):
-                logger.error("Not a PDF content-type or magic bytes")
+                raise ValueError("Not a PDF content-type or magic bytes")
 
             async with aiofiles.open(save_path, "wb") as f:
                 await f.write(response.content)
@@ -287,6 +287,7 @@ async def download_pdf_async(
                         user_agent=config.COMMON_HEADERS["User-Agent"],
                         java_script_enabled=True,
                         ignore_https_errors=True,
+                        accept_downloads=True,
                     )
                     try:
                         stealth = Stealth()
@@ -364,12 +365,32 @@ async def download_pdf_async(
                             except Exception:
                                 pass
 
-                            async with page.expect_response(
-                                _is_pdf_response, timeout=timeout * 1000
-                            ) as waiter:
-                                await page.goto(url, wait_until="domcontentloaded")
-                            pdf_resp = await waiter.value
-                            body = await pdf_resp.body()
+                            _download_future = asyncio.get_event_loop().create_future()
+
+                            def _on_download(dl):
+                                if not _download_future.done():
+                                    _download_future.set_result(dl)
+
+                            page.on("download", _on_download)
+
+                            try:
+                                async with page.expect_response(
+                                    _is_pdf_response, timeout=timeout * 1000
+                                ) as waiter:
+                                    await page.goto(url, wait_until="domcontentloaded")
+                                pdf_resp = await waiter.value
+                                body = await pdf_resp.body()
+                            except Exception as nav_err:
+                                if "Download is starting" in str(nav_err):
+                                    try:
+                                        download = await asyncio.wait_for(
+                                            _download_future, timeout=timeout
+                                        )
+                                        await download.save_as(save_path)
+                                        return save_path
+                                    except asyncio.TimeoutError:
+                                        pass
+                                raise
 
                             if not _looks_like_pdf(
                                 pdf_resp.headers.get("content-type"),
@@ -386,6 +407,7 @@ async def download_pdf_async(
                         return save_path
                     except Exception as e:
                         logger.error(f"Error downloading PDF from {url}: {e}")
+                        raise
                     finally:
                         await context.close()
                         await browser.close()

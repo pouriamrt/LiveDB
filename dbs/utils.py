@@ -1,3 +1,5 @@
+import re
+
 from agno.knowledge.document.base import Document
 from agno.knowledge.chunking.semantic import SemanticChunking
 from typing import List
@@ -12,7 +14,7 @@ class CustomChunking(SemanticChunking):
 
         chunked_documents_without_references = []
         for chunk in chunked_documents:
-            if "References" in chunk.content:
+            if re.search(r"^\s*References\s*$", chunk.content, re.MULTILINE):
                 break
             chunked_documents_without_references.append(chunk)
 

@@ -127,8 +127,7 @@ async def pubmed_fetch_task(pmids: List[str]) -> List[Dict[str, Any]]:
 async def fetch_pmc_fulltext_task(rec: Dict[str, Any]) -> Dict[str, Any]:
     res = await try_fetch_pmc_fulltext_pdf(rec.get("pmid"), rec.get("pmcid"))
     if res and res.get("path"):
-        # your function returns list-of-tuples; take first path
-        rec["fulltext_path"] = res["path"][0][0]
+        rec["fulltext_path"] = res["path"][0]
     return rec
 
 
@@ -168,7 +167,11 @@ async def livedb_flow(
 
     # Download OA PDFs with bounded concurrency
     dl_tasks = [download_openalex_pdf_task(r) for r in included_openalex]
-    downloaded_openalex = await asyncio.gather(*dl_tasks)
+    dl_results = await asyncio.gather(*dl_tasks, return_exceptions=True)
+    downloaded_openalex = [r for r in dl_results if isinstance(r, dict)]
+    for r in dl_results:
+        if isinstance(r, BaseException):
+            log.warning(f"PDF download failed: {r}")
     not_included_from_oa = [
         r for r in downloaded_openalex if not r.get("fulltext_path")
     ]

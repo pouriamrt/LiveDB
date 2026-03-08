@@ -40,12 +40,16 @@ logger.info("IngestToDB initialized")
 
 async def process_one(record):
     try:
-        file_path = str(record.get("fulltext_path"))
+        file_path = record.get("fulltext_path")
         if not file_path:
-            logger.error(f"No fulltext path found for record {record.get('pmid')}")
+            logger.warning(
+                f"No fulltext path for record {record.get('pmid')}, skipping"
+            )
             return False
+        file_path = str(file_path)
 
-        pub_year = int(record.get("pub_year"))
+        pub_year_raw = record.get("pub_year")
+        pub_year = int(pub_year_raw) if pub_year_raw is not None else None
         added_year = int(arrow.now().year)
         author = str(record.get("authors"))
         title = str(record.get("title"))

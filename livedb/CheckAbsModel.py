@@ -70,7 +70,7 @@ logger.info("Model loaded and ready.")
 
 
 def check_abs_model(
-    text: str, max_length: int = 512, device: str = "cpu"
+    text: str, max_length: int = 512
 ) -> Tuple[List[List[int]], List[List[float]]]:
     enc = tokenizer(
         [text],
@@ -84,7 +84,7 @@ def check_abs_model(
     all_preds = [[] for _ in TASKS]
     all_confs = [[] for _ in TASKS]
 
-    enc = {k: v.to(device) for k, v in enc.items()}
+    enc = {k: v.to(DEVICE) for k, v in enc.items()}
 
     with torch.no_grad():
         out = model(**enc)
@@ -98,7 +98,8 @@ def check_abs_model(
             all_confs[t_idx].extend(confs)
 
         del enc, out, logits_list, probs_list
-        torch.cuda.empty_cache() if device.startswith("cuda") else None
+        if DEVICE.startswith("cuda"):
+            torch.cuda.empty_cache()
 
     out_cols_labels = {
         f"{TASKS[t]}_pred": [LABELS[i] for i in all_preds[t]] for t in range(len(TASKS))
@@ -109,9 +110,9 @@ def check_abs_model(
 
 
 async def check_abs_model_async(
-    text: str, max_length: int = 512, device: str = "cpu"
+    text: str, max_length: int = 512
 ) -> Tuple[List[List[int]], List[List[float]]]:
-    return await asyncio.to_thread(check_abs_model, text, max_length, device)
+    return await asyncio.to_thread(check_abs_model, text, max_length)
 
 
 async def main():
