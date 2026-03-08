@@ -10,7 +10,7 @@ from tenacity import (
 import arrow
 import aiofiles
 from playwright.async_api import async_playwright
-from playwright_stealth import Stealth
+from playwright_stealth import stealth_async
 import re
 from Config import config
 from loguru import logger
@@ -281,7 +281,7 @@ async def download_pdf_async(
 
         except Exception:
             async with BROWSER_SEM:
-                async with Stealth().use_async(async_playwright()) as p:
+                async with async_playwright() as p:
                     browser = await p.chromium.launch(headless=headless)
                     context = await browser.new_context(
                         user_agent=config.COMMON_HEADERS["User-Agent"],
@@ -290,6 +290,7 @@ async def download_pdf_async(
                     )
                     try:
                         page = await context.new_page()
+                        await stealth_async(page)
                         if landing_url:
                             await asyncio.wait_for(
                                 page.goto(landing_url, wait_until="networkidle"),
