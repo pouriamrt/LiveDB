@@ -21,7 +21,7 @@ class PaperExtraction(BaseModel):
 
     paper: PaperMetadata
     claims: list[str] = Field(default_factory=list)
-    methodology: str = ""
+    methodology: str | None = ""
     population: str | None = None
     intervention: str | None = None
     comparator: str | None = None

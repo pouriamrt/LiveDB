@@ -8,6 +8,8 @@ import json
 import numpy as np
 from hdbscan import HDBSCAN
 from loguru import logger as log
+from umap import UMAP
+
 from Config import config
 from gap_analysis import openai_client as _client
 from gap_analysis.models import PaperExtraction, ThemeCluster
@@ -74,19 +76,44 @@ async def cluster_papers(
     texts = [f"{e.paper.title}. {' '.join(e.claims[:3])}" for e in extractions]
     embeddings = await _embed_texts(texts)
 
+    # Reduce dimensionality with UMAP before clustering (critical for small datasets
+    # in high-dimensional embedding space — HDBSCAN density estimates fail otherwise)
+    n_samples = len(extractions)
+    n_components = min(10, n_samples - 2)  # UMAP needs n_components < n_samples
+    n_neighbors = min(15, n_samples - 1)  # UMAP default is 15
+    reduced = UMAP(
+        n_components=n_components,
+        n_neighbors=n_neighbors,
+        metric="cosine",
+        random_state=42,
+    ).fit_transform(embeddings)
+
     # Cluster
     clusterer = HDBSCAN(
         min_cluster_size=min_cluster_size,
-        min_samples=2,
+        min_samples=1,
         metric="euclidean",
     )
-    labels = clusterer.fit_predict(embeddings)
+    labels = clusterer.fit_predict(reduced)
     unique_labels = set(labels)
+    n_clusters = len(unique_labels - {-1})
 
     log.info(
-        f"HDBSCAN found {len(unique_labels - {-1})} clusters, "
-        f"{(labels == -1).sum()} noise points"
+        f"HDBSCAN found {n_clusters} clusters, {(labels == -1).sum()} noise points"
     )
+
+    # Fallback: if HDBSCAN finds no clusters, put all papers in one group
+    if n_clusters == 0:
+        log.warning("No clusters found — grouping all papers into a single theme")
+        label_info = await _label_cluster(extractions, model)
+        return [
+            ThemeCluster(
+                cluster_id=0,
+                label=label_info.get("label", "All papers"),
+                description=label_info.get("description", ""),
+                papers=extractions,
+            )
+        ]
 
     # Group papers by cluster
     clusters_dict: dict[int, list[PaperExtraction]] = {}
@@ -97,7 +124,7 @@ async def cluster_papers(
         else:
             clusters_dict.setdefault(label, []).append(ext)
 
-    # Assign noise papers to nearest cluster
+    # Assign noise papers to nearest cluster (using reduced embeddings)
     if noise_papers and clusters_dict:
         # Pre-build lookup: id(extraction) -> index for O(1) access
         ext_index = {id(ext): i for i, ext in enumerate(extractions)}
@@ -105,11 +132,11 @@ async def cluster_papers(
         centroids = {}
         for cid, papers in clusters_dict.items():
             indices = [i for i, lbl in enumerate(labels) if lbl == cid]
-            centroids[cid] = embeddings[indices].mean(axis=0)
+            centroids[cid] = reduced[indices].mean(axis=0)
 
         for paper in noise_papers:
             idx = ext_index[id(paper)]
-            emb = embeddings[idx]
+            emb = reduced[idx]
             nearest = min(centroids, key=lambda c: np.linalg.norm(emb - centroids[c]))
             clusters_dict[nearest].append(paper)
 
