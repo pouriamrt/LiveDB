@@ -39,11 +39,14 @@ async def _extract_batch(
                 temperature=0.1,
             )
             raw = json.loads(resp.choices[0].message.content)
-            items = (
-                raw
-                if isinstance(raw, list)
-                else raw.get("papers", raw.get("results", [raw]))
-            )
+            if isinstance(raw, list):
+                items = raw
+            else:
+                # LLM may use any key — find the first list value
+                items = next(
+                    (v for v in raw.values() if isinstance(v, list)),
+                    [raw],
+                )
         except Exception as e:
             log.warning(f"Batch extraction failed: {e}")
             return []

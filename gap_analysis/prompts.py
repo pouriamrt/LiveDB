@@ -47,7 +47,7 @@ Extract structured findings from these {count} paper abstracts:
 
 {papers}
 
-Return a JSON array with {count} objects matching the schema.
+Return JSON: {{"papers": [... {count} objects matching the schema ...]}}
 """
 
 CLUSTER_LABEL_SYSTEM = """\
