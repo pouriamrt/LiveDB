@@ -15,7 +15,7 @@ from gap_analysis.report import generate_dashboard_html
 
 
 async def _run_gap_pipeline(
-    report_id: str, query: str, max_records: int, start_day: int
+    report_id: str, query: str, max_records: int, days_back: int
 ) -> None:
     """Run gap analysis pipeline in background and store the result."""
     from dbs.IngestToDB import store_gap_report
@@ -34,7 +34,7 @@ async def _run_gap_pipeline(
         report = await gap_analysis_flow(
             query=query,
             max_records=max_records,
-            start_day=start_day,
+            days_back=days_back,
         )
         # Overwrite the auto-generated id so it matches the one we returned
         report.id = report_id
@@ -117,7 +117,7 @@ def _register_gap_routes(app: FastAPI) -> None:
             return JSONResponse(content={"error": "query is required"}, status_code=400)
 
         max_records = body.get("max_records", config.GAP_DEFAULT_SCOPE)
-        start_day = body.get("start_day", config.GAP_DEFAULT_DAYS)
+        days_back = body.get("days_back", config.GAP_DEFAULT_DAYS)
         report_id = str(uuid.uuid4())
 
         # Create a placeholder row so the list endpoint shows it immediately
@@ -135,7 +135,7 @@ def _register_gap_routes(app: FastAPI) -> None:
             await conn.commit()
 
         background_tasks.add_task(
-            _run_gap_pipeline, report_id, query, max_records, start_day
+            _run_gap_pipeline, report_id, query, max_records, days_back
         )
 
         return {"report_id": report_id, "status": "pending"}

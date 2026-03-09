@@ -20,25 +20,29 @@ from gap_analysis.report import generate_dashboard_html, generate_pdf
 async def gap_analysis_flow(
     query: str,
     max_records: int = 100,
-    start_day: int = 180,
-    days_back: int = 1,
+    days_back: int = 180,
     run_picos: bool = True,
     model: str | None = None,
     output_dir: str = "reports",
 ) -> GapReport:
-    """Run the full gap analysis pipeline."""
+    """Run the full gap analysis pipeline.
+
+    Args:
+        days_back: How many days back from today to search.
+    """
     log.info(f"Starting gap analysis for: {query} (max {max_records} papers)")
 
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=start_day)
+    start_date = end_date - timedelta(days=days_back)
     date_range = f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
 
     # Phase 1: Fetch
+    # OpenAlex/PubMed API convention: start_day=0 (end at today), days_back=N (window width)
     log.info("Phase 1: Fetching papers...")
     papers = await fetch_papers(
         query=query,
         max_records=max_records,
-        start_day=start_day,
+        start_day=0,
         days_back=days_back,
         run_picos=run_picos,
     )

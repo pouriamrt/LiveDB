@@ -243,7 +243,7 @@ if __name__ == "__main__":
             gap_analysis_flow(
                 query=query,
                 max_records=max_papers,
-                start_day=days,
+                days_back=days,
             )
         )
         console.print(
