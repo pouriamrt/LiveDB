@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gap Analysis — {{ report.query }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <style>
+        /* ── Reset & Base ─────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { font-size: 15px; scroll-behavior: smooth; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #f0f2f5;
+            color: #1e1e2f;
+            line-height: 1.6;
+        }
+
+        /* ── Header ───────────────────────────────────────────────── */
+        header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #fff;
+            padding: 2rem 2.5rem;
+        }
+        header h1 { font-size: 1.65rem; font-weight: 700; margin-bottom: .35rem; }
+        header p  { font-size: .92rem; opacity: .82; }
+        .stats-bar {
+            display: flex;
+            gap: 2rem;
+            margin-top: 1.2rem;
+            flex-wrap: wrap;
+        }
+        .stat-item {
+            background: rgba(255,255,255,.1);
+            border-radius: 8px;
+            padding: .6rem 1.3rem;
+            text-align: center;
+            min-width: 120px;
+        }
+        .stat-item .value { font-size: 1.5rem; font-weight: 700; }
+        .stat-item .label { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; opacity: .75; }
+
+        /* ── Layout ───────────────────────────────────────────────── */
+        .container { max-width: 1280px; margin: 0 auto; padding: 2rem 1.5rem; }
+        section { margin-bottom: 2.5rem; }
+        section > h2 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            padding-bottom: .4rem;
+            border-bottom: 2px solid #e0e0e0;
+            color: #16213e;
+        }
+
+        /* ── Charts ───────────────────────────────────────────────── */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+        @media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } }
+        .chart-card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        }
+        .chart-card h3 { font-size: 1rem; margin-bottom: .8rem; color: #333; }
+        .chart-wrapper { position: relative; max-height: 320px; }
+
+        /* ── Filter bar ───────────────────────────────────────────── */
+        .filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .5rem;
+            margin-bottom: 1.2rem;
+        }
+        .filter-btn {
+            border: 1px solid #ccc;
+            background: #fff;
+            border-radius: 20px;
+            padding: .35rem 1rem;
+            font-size: .82rem;
+            cursor: pointer;
+            transition: all .15s;
+        }
+        .filter-btn:hover { background: #f5f5f5; }
+        .filter-btn.active { background: #16213e; color: #fff; border-color: #16213e; }
+        .filter-group-label {
+            font-size: .78rem;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: #888;
+            align-self: center;
+            margin-right: .2rem;
+        }
+        .filter-separator {
+            width: 1px;
+            background: #ddd;
+            margin: 0 .4rem;
+            align-self: stretch;
+        }
+
+        /* ── Gap cards ────────────────────────────────────────────── */
+        .gap-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 1rem; }
+        .gap-card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 1.2rem 1.4rem;
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+            border-left: 4px solid #ccc;
+            transition: box-shadow .15s;
+        }
+        .gap-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.1); }
+        .gap-card-header { display: flex; align-items: center; gap: .6rem; margin-bottom: .5rem; flex-wrap: wrap; }
+        .badge {
+            display: inline-block;
+            border-radius: 4px;
+            padding: .15rem .55rem;
+            font-size: .72rem;
+            font-weight: 600;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+        }
+        .severity-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+        .gap-card h4 { font-size: .98rem; font-weight: 600; color: #222; }
+        .gap-card p  { font-size: .88rem; color: #555; margin-bottom: .6rem; }
+        .gap-card .evidence-list {
+            list-style: none;
+            padding: 0;
+            margin-bottom: .5rem;
+        }
+        .gap-card .evidence-list li {
+            font-size: .82rem;
+            color: #666;
+            padding-left: 1rem;
+            position: relative;
+            margin-bottom: .2rem;
+        }
+        .gap-card .evidence-list li::before {
+            content: '\25B8';
+            position: absolute;
+            left: 0;
+            color: #999;
+        }
+        .gap-card .suggested {
+            font-size: .82rem;
+            font-style: italic;
+            color: #0f3460;
+            background: #eef3fa;
+            border-radius: 6px;
+            padding: .45rem .7rem;
+        }
+
+        /* ── Accordion (themes) ───────────────────────────────────── */
+        .accordion-item {
+            background: #fff;
+            border-radius: 10px;
+            margin-bottom: .6rem;
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+            overflow: hidden;
+        }
+        .accordion-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.3rem;
+            cursor: pointer;
+            user-select: none;
+            transition: background .15s;
+        }
+        .accordion-header:hover { background: #fafafa; }
+        .accordion-header h3 { font-size: .98rem; font-weight: 600; }
+        .accordion-header .meta { font-size: .82rem; color: #888; }
+        .accordion-header .chevron {
+            transition: transform .25s;
+            font-size: 1.1rem;
+            color: #999;
+        }
+        .accordion-item.open .accordion-header .chevron { transform: rotate(90deg); }
+        .accordion-body {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height .3s ease;
+            padding: 0 1.3rem;
+        }
+        .accordion-item.open .accordion-body {
+            max-height: 2000px;
+            padding-bottom: 1rem;
+        }
+        .accordion-body ul {
+            list-style: none;
+            padding: 0;
+        }
+        .accordion-body li {
+            font-size: .88rem;
+            padding: .35rem 0;
+            border-bottom: 1px solid #f0f0f0;
+            color: #444;
+        }
+        .accordion-body li:last-child { border-bottom: none; }
+
+        /* ── Paper table ──────────────────────────────────────────── */
+        .search-box {
+            width: 100%;
+            max-width: 400px;
+            padding: .55rem 1rem;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: .9rem;
+            margin-bottom: 1rem;
+            outline: none;
+            transition: border-color .15s;
+        }
+        .search-box:focus { border-color: #0f3460; }
+        .paper-table-wrapper { overflow-x: auto; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        }
+        thead th {
+            background: #16213e;
+            color: #fff;
+            font-size: .82rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            padding: .7rem 1rem;
+            text-align: left;
+        }
+        tbody td {
+            padding: .65rem 1rem;
+            font-size: .88rem;
+            border-bottom: 1px solid #f0f0f0;
+            color: #444;
+        }
+        tbody tr:hover { background: #f8f9fb; }
+
+        /* ── Footer ───────────────────────────────────────────────── */
+        footer {
+            text-align: center;
+            padding: 2rem 1rem;
+            font-size: .78rem;
+            color: #999;
+            border-top: 1px solid #e0e0e0;
+            margin-top: 1rem;
+        }
+
+        /* ── Utility ──────────────────────────────────────────────── */
+        .no-results {
+            text-align: center;
+            padding: 2rem;
+            color: #999;
+            font-style: italic;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ════════════════ HEADER ════════════════ -->
+<header>
+    <h1>Research Gap Analysis</h1>
+    <p>{{ report.query }}</p>
+    <div class="stats-bar">
+        <div class="stat-item">
+            <div class="value">{{ report.scope }}</div>
+            <div class="label">Papers Analyzed</div>
+        </div>
+        <div class="stat-item">
+            <div class="value">{{ report.gaps | length }}</div>
+            <div class="label">Gaps Found</div>
+        </div>
+        <div class="stat-item">
+            <div class="value">{{ report.themes | length }}</div>
+            <div class="label">Themes</div>
+        </div>
+        <div class="stat-item">
+            <div class="value">{{ report.date_range or 'N/A' }}</div>
+            <div class="label">Period</div>
+        </div>
+    </div>
+</header>
+
+<div class="container">
+
+    <!-- ════════════════ EXECUTIVE SUMMARY ════════════════ -->
+    {% if report.executive_summary %}
+    <section>
+        <h2>Executive Summary</h2>
+        <div class="chart-card">
+            <p style="font-size:.92rem;color:#444;">{{ report.executive_summary }}</p>
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- ════════════════ CHARTS ════════════════ -->
+    <section>
+        <h2>Overview Charts</h2>
+        <div class="charts-grid">
+            <div class="chart-card">
+                <h3>Gap Severity Distribution</h3>
+                <div class="chart-wrapper">
+                    <canvas id="severityChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3>Gap Type Distribution</h3>
+                <div class="chart-wrapper">
+                    <canvas id="typeChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════ GAPS ════════════════ -->
+    <section id="gaps-section">
+        <h2>Identified Research Gaps</h2>
+
+        <!-- Filter bar -->
+        <div class="filter-bar">
+            <span class="filter-group-label">Type</span>
+            <button class="filter-btn active" data-filter="type" data-value="all">All</button>
+            {% for gtype, gcolor in gap_type_colors.items() %}
+            <button class="filter-btn" data-filter="type" data-value="{{ gtype }}"
+                    style="border-color:{{ gcolor }};">{{ gtype | replace('_', ' ') | title }}</button>
+            {% endfor %}
+            <div class="filter-separator"></div>
+            <span class="filter-group-label">Severity</span>
+            <button class="filter-btn active" data-filter="severity" data-value="all">All</button>
+            {% for sev, scolor in severity_colors.items() %}
+            <button class="filter-btn" data-filter="severity" data-value="{{ sev }}"
+                    style="border-color:{{ scolor }};">{{ sev | title }}</button>
+            {% endfor %}
+        </div>
+
+        <!-- Cards -->
+        <div class="gap-cards" id="gapCards">
+            {% for gap in report.gaps %}
+            <div class="gap-card"
+                 data-type="{{ gap.gap_type }}"
+                 data-severity="{{ gap.severity }}"
+                 style="border-left-color: {{ gap_type_colors.get(gap.gap_type, '#ccc') }};">
+                <div class="gap-card-header">
+                    <span class="badge" style="background:{{ gap_type_colors.get(gap.gap_type, '#888') }};">{{ gap.gap_type | replace('_', ' ') }}</span>
+                    <span class="severity-dot" style="background:{{ severity_colors.get(gap.severity, '#999') }};" title="{{ gap.severity }}"></span>
+                    <span style="font-size:.78rem;color:#888;">{{ gap.severity | upper }}</span>
+                </div>
+                <h4>{{ gap.title }}</h4>
+                <p>{{ gap.description }}</p>
+                {% if gap.evidence %}
+                <ul class="evidence-list">
+                    {% for e in gap.evidence %}
+                    <li>{{ e }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+                {% if gap.suggested_research %}
+                <div class="suggested">{{ gap.suggested_research }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        <div class="no-results" id="gapNoResults">No gaps match the current filters.</div>
+    </section>
+
+    <!-- ════════════════ THEMES ACCORDION ════════════════ -->
+    <section>
+        <h2>Theme Clusters</h2>
+        {% for theme in report.themes %}
+        <div class="accordion-item">
+            <div class="accordion-header" onclick="toggleAccordion(this)">
+                <div>
+                    <h3>{{ theme.label }}</h3>
+                    <span class="meta">{{ theme.description }}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:.8rem;">
+                    <span class="meta">{{ theme.papers | length }} paper{{ 's' if theme.papers | length != 1 else '' }}</span>
+                    <span class="chevron">&#9654;</span>
+                </div>
+            </div>
+            <div class="accordion-body">
+                <ul>
+                    {% for p in theme.papers %}
+                    <li>
+                        <strong>{{ p.paper.title }}</strong>
+                        {% if p.paper.journal %} &mdash; {{ p.paper.journal }}{% endif %}
+                        {% if p.paper.publication_date %} ({{ p.paper.publication_date }}){% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endfor %}
+    </section>
+
+    <!-- ════════════════ PAPER TABLE ════════════════ -->
+    <section>
+        <h2>Analyzed Papers</h2>
+        <input type="text" class="search-box" id="paperSearch" placeholder="Search papers by title, journal, or author...">
+        <div class="paper-table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Journal</th>
+                        <th>Date</th>
+                        <th>Authors</th>
+                    </tr>
+                </thead>
+                <tbody id="paperTableBody">
+                    {% for theme in report.themes %}
+                    {% for p in theme.papers %}
+                    <tr>
+                        <td>{{ p.paper.title }}</td>
+                        <td>{{ p.paper.journal or 'N/A' }}</td>
+                        <td>{{ p.paper.publication_date or 'N/A' }}</td>
+                        <td>{{ p.paper.authors | join(', ') if p.paper.authors else 'N/A' }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="no-results" id="paperNoResults">No papers match your search.</div>
+    </section>
+
+</div>
+
+<!-- ════════════════ FOOTER ════════════════ -->
+<footer>
+    Generated by LiveDB Gap Analysis &middot; {{ report.created_at.strftime('%Y-%m-%d %H:%M') }}
+</footer>
+
+<!-- ════════════════ SCRIPTS ════════════════ -->
+<script>
+(function () {
+    "use strict";
+
+    /* ── Chart Data ──────────────────────────────────────────── */
+    const severityCounts = {};
+    const typeCounts = {};
+    const severityColors = {{ severity_colors | tojson }};
+    const gapTypeColors  = {{ gap_type_colors | tojson }};
+
+    document.querySelectorAll('.gap-card').forEach(function (card) {
+        const sev  = card.dataset.severity;
+        const type = card.dataset.type;
+        severityCounts[sev]  = (severityCounts[sev]  || 0) + 1;
+        typeCounts[type]     = (typeCounts[type]     || 0) + 1;
+    });
+
+    /* Severity Doughnut */
+    const sevLabels = Object.keys(severityCounts);
+    const sevData   = sevLabels.map(function (l) { return severityCounts[l]; });
+    const sevColors = sevLabels.map(function (l) { return severityColors[l] || '#999'; });
+
+    new Chart(document.getElementById('severityChart'), {
+        type: 'doughnut',
+        data: {
+            labels: sevLabels.map(function (l) { return l.charAt(0).toUpperCase() + l.slice(1); }),
+            datasets: [{
+                data: sevData,
+                backgroundColor: sevColors,
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true } }
+            }
+        }
+    });
+
+    /* Gap Type Bar */
+    const typeLabels = Object.keys(typeCounts);
+    const typeData   = typeLabels.map(function (l) { return typeCounts[l]; });
+    const typeColors = typeLabels.map(function (l) { return gapTypeColors[l] || '#888'; });
+
+    new Chart(document.getElementById('typeChart'), {
+        type: 'bar',
+        data: {
+            labels: typeLabels.map(function (l) { return l.replace(/_/g, ' '); }),
+            datasets: [{
+                label: 'Count',
+                data: typeData,
+                backgroundColor: typeColors,
+                borderRadius: 4,
+                barThickness: 36
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1 } },
+                x: { ticks: { font: { size: 11 } } }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    /* ── Gap Filtering ───────────────────────────────────────── */
+    var activeType     = 'all';
+    var activeSeverity = 'all';
+
+    function applyFilters() {
+        var cards   = document.querySelectorAll('.gap-card');
+        var visible = 0;
+        cards.forEach(function (card) {
+            var matchType = (activeType === 'all' || card.dataset.type === activeType);
+            var matchSev  = (activeSeverity === 'all' || card.dataset.severity === activeSeverity);
+            if (matchType && matchSev) {
+                card.style.display = '';
+                visible++;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+        document.getElementById('gapNoResults').style.display = visible === 0 ? 'block' : 'none';
+    }
+
+    document.querySelectorAll('.filter-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var group = this.dataset.filter;
+            var value = this.dataset.value;
+            /* Toggle active in group */
+            document.querySelectorAll('.filter-btn[data-filter="' + group + '"]').forEach(function (b) {
+                b.classList.remove('active');
+            });
+            this.classList.add('active');
+            if (group === 'type')     activeType     = value;
+            if (group === 'severity') activeSeverity = value;
+            applyFilters();
+        });
+    });
+
+    /* ── Accordion Toggle ────────────────────────────────────── */
+    window.toggleAccordion = function (header) {
+        var item = header.parentElement;
+        item.classList.toggle('open');
+    };
+
+    /* ── Paper Search ────────────────────────────────────────── */
+    var searchBox = document.getElementById('paperSearch');
+    if (searchBox) {
+        searchBox.addEventListener('input', function () {
+            var query = this.value.toLowerCase();
+            var rows  = document.querySelectorAll('#paperTableBody tr');
+            var visible = 0;
+            rows.forEach(function (row) {
+                var text = row.textContent.toLowerCase();
+                if (text.indexOf(query) !== -1) {
+                    row.style.display = '';
+                    visible++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+            document.getElementById('paperNoResults').style.display = visible === 0 ? 'block' : 'none';
+        });
+    }
+})();
+</script>
+</body>
+</html>

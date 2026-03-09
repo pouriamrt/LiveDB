@@ -45,5 +45,15 @@ class Config(BaseModel):
     PGVECTOR_MEMORY_URL: str = os.getenv("PGVECTOR_MEMORY_URL")
     PGVECTOR_MEMORY_TABLE: str = os.getenv("PGVECTOR_MEMORY_TABLE")
 
+    # Gap Analysis
+    GAP_REPORTS_TABLE: str = os.getenv("GAP_REPORTS_TABLE", "gap_reports")
+    GAP_REPORTS_DB_URL: str = os.getenv(
+        "GAP_REPORTS_DB_URL", os.getenv("SQL_DATABASE_URL")
+    )
+    GAP_LLM_BATCH_SIZE: int = 5
+    GAP_LLM_CONCURRENCY: int = 5
+    GAP_DEFAULT_SCOPE: int = 100
+    GAP_DEFAULT_DAYS: int = 180
+
 
 config = Config()

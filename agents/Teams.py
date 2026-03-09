@@ -4,6 +4,7 @@ from agents.Agents import (
     knowledge_agent,
     sql_agent,
     general_agent,
+    gap_analysis_agent,
     memory_db,
     model,
 )
@@ -22,6 +23,7 @@ def initialize_team(session_state: dict) -> Team:
             sql_agent,
             reasoning_agent,
             general_agent,
+            gap_analysis_agent,
         ],
         description="You are a coordinator that coordinates a team of specialist agents to handle research tasks.",
         instructions=[
@@ -31,6 +33,7 @@ def initialize_team(session_state: dict) -> Team:
             "- SQL queries -> SQLAgent",
             "- Reasoning -> ReasoningAgent",
             "- General or multi-step queries -> GeneralAgent",
+            "- Gap analysis, research gaps, or gap reports -> GapAnalysisAgent",
             "Gather all agents' findings and synthesize a coherent answer.",
             "Cite sources for any facts and maintain clarity in the final answer.",
             "In the final response, include a clickable hyperlink to the reference.",

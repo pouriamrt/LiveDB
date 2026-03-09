@@ -138,3 +138,30 @@ general_agent = Agent(
     exponential_backoff=True,
     # debug_mode=True
 )
+
+# Gap Analysis Agent
+gap_analysis_agent = Agent(
+    name="GapAnalysisAgent",
+    model=model,
+    db=memory_db,
+    description=(
+        "You are a research gap analysis specialist. You query past gap analysis "
+        "reports stored in the gap_reports database table and help users understand "
+        "research gaps, themes, and priorities."
+    ),
+    instructions=[
+        "Query the gap_reports table for past analyses using SQL",
+        "Answer follow-up questions about specific gaps, themes, or papers",
+        "Compare gaps across different topics or time periods",
+        "For new full-scope analysis, suggest the user run option [3] in main.py",
+        "Present findings with citations to specific papers",
+    ],
+    tools=[postgres_tools],
+    max_tool_calls_from_history=3,
+    add_history_to_context=True,
+    num_history_runs=3,
+    read_chat_history=True,
+    markdown=True,
+    exponential_backoff=True,
+    # debug_mode=True,
+)
