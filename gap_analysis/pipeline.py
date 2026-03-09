@@ -11,7 +11,7 @@ from prefect import flow
 from gap_analysis.analyze import analyze_gaps
 from gap_analysis.cluster import cluster_papers
 from gap_analysis.extract import extract_papers
-from gap_analysis.fetch import fetch_papers
+from gap_analysis.fetch import fetch_papers, translate_query
 from gap_analysis.models import GapReport
 from gap_analysis.report import generate_dashboard_html, generate_pdf
 
@@ -36,11 +36,15 @@ async def gap_analysis_flow(
     start_date = end_date - timedelta(days=days_back)
     date_range = f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
 
+    # Phase 0: Translate natural language query into search keywords
+    log.info("Phase 0: Translating query...")
+    search_queries = await translate_query(query, model=model)
+
     # Phase 1: Fetch
     # OpenAlex/PubMed API convention: start_day=0 (end at today), days_back=N (window width)
     log.info("Phase 1: Fetching papers...")
     papers = await fetch_papers(
-        query=query,
+        queries=search_queries,
         max_records=max_records,
         start_day=0,
         days_back=days_back,

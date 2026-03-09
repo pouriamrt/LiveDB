@@ -3,14 +3,44 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pandas as pd
 from loguru import logger as log
 
 from gap_analysis.models import PaperMetadata
+from gap_analysis.prompts import QUERY_TRANSLATE_SYSTEM, QUERY_TRANSLATE_USER
 from livedb.CheckAbsModel import check_abs_model_async
 from livedb.GetLatestPapers import pubmed_efetch, pubmed_esearch
 from livedb.OpenAlexDownload import fetch_openalex_latest
+
+
+async def translate_query(user_input: str, model: str | None = None) -> list[str]:
+    """Translate a natural language query into optimized API search queries."""
+    from Config import config
+    from gap_analysis import openai_client
+
+    model = model or config.MODEL_NAME
+    try:
+        resp = await openai_client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": QUERY_TRANSLATE_SYSTEM},
+                {
+                    "role": "user",
+                    "content": QUERY_TRANSLATE_USER.format(user_input=user_input),
+                },
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+        )
+        raw = json.loads(resp.choices[0].message.content)
+        queries = raw.get("queries", [user_input])
+        log.info(f"Translated query into {len(queries)} search queries: {queries}")
+        return queries
+    except Exception as e:
+        log.warning(f"Query translation failed: {e}. Using original input.")
+        return [user_input]
 
 
 def _parse_authors(raw: object) -> list[str]:
@@ -26,27 +56,56 @@ def _parse_authors(raw: object) -> list[str]:
 
 
 async def fetch_papers(
-    query: str,
+    queries: list[str],
     max_records: int = 100,
-    start_day: int = 180,
-    days_back: int = 1,
+    start_day: int = 0,
+    days_back: int = 180,
     run_picos: bool = True,
 ) -> list[PaperMetadata]:
-    """Fetch from both sources, deduplicate by DOI, optionally PICOS filter."""
+    """Fetch from both sources for each query, deduplicate, optionally PICOS filter."""
 
-    oa_task = fetch_openalex_latest(
-        query=query,
-        start_day=start_day,
-        days_back=days_back,
-        max_records=max_records,
-        only_articles=True,
-        only_oa=True,
-    )
-    pm_task = pubmed_esearch(
-        query, days_back=days_back, start_day=start_day, retmax=max_records
-    )
+    # Run all queries in parallel
+    per_query_max = max(max_records // len(queries), 10)
+    all_tasks = []
+    for q in queries:
+        all_tasks.append(
+            fetch_openalex_latest(
+                query=q,
+                start_day=start_day,
+                days_back=days_back,
+                max_records=per_query_max,
+                only_articles=True,
+                only_oa=True,
+            )
+        )
+        all_tasks.append(
+            pubmed_esearch(
+                q, days_back=days_back, start_day=start_day, retmax=per_query_max
+            )
+        )
 
-    oa_df, pmids = await asyncio.gather(oa_task, pm_task)
+    results = await asyncio.gather(*all_tasks, return_exceptions=True)
+
+    # Separate OpenAlex DataFrames (even indices) and PubMed PMID lists (odd indices)
+    oa_dfs = []
+    all_pmids = []
+    for i, result in enumerate(results):
+        if isinstance(result, BaseException):
+            log.warning(f"Fetch failed for query index {i}: {result}")
+            continue
+        if i % 2 == 0:
+            oa_dfs.append(result)
+        else:
+            all_pmids.extend(result)
+
+    # Merge OpenAlex DataFrames
+    if oa_dfs:
+        oa_df = pd.concat(oa_dfs, ignore_index=True).drop_duplicates(subset=["id"])
+    else:
+        oa_df = pd.DataFrame()
+
+    # Deduplicate PMIDs
+    pmids = list(dict.fromkeys(all_pmids))
 
     # Convert OpenAlex DataFrame to PaperMetadata
     # NaN values from pandas must be converted to None for Pydantic
@@ -94,7 +153,7 @@ async def fetch_papers(
                     abstract=rec["abstract"],
                 )
 
-    log.info(f"Fetched {len(papers)} unique papers for query: {query}")
+    log.info(f"Fetched {len(papers)} unique papers across {len(queries)} queries")
 
     result = list(papers.values())
 

@@ -1,5 +1,28 @@
 """Centralized LLM prompt templates for gap analysis."""
 
+QUERY_TRANSLATE_SYSTEM = """\
+You are a biomedical literature search expert. Convert a natural language \
+research question into optimized search queries for PubMed and OpenAlex APIs.
+
+Generate 2-4 complementary keyword queries that together cover the full scope \
+of the user's question. Each query should target a different angle or aspect.
+
+Rules:
+- Use MeSH-style terms and standard biomedical vocabulary
+- Keep each query concise (3-6 key terms)
+- Avoid stop words, articles, and filler
+- Cover synonyms and alternative terminology across queries
+- First query should be the most direct/broad match
+
+Return JSON: {{"queries": ["query 1", "query 2", "query 3"]}}
+"""
+
+QUERY_TRANSLATE_USER = """\
+Convert this research question into search queries:
+
+"{user_input}"
+"""
+
 EXTRACTION_SYSTEM = """\
 You are a biomedical research analyst. Extract structured findings from each \
 paper abstract provided. Return a JSON array where each element matches the \
