@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
+import pandas as pd
 from loguru import logger as log
 
 from gap_analysis.models import PaperMetadata
@@ -48,21 +49,30 @@ async def fetch_papers(
     oa_df, pmids = await asyncio.gather(oa_task, pm_task)
 
     # Convert OpenAlex DataFrame to PaperMetadata
+    # NaN values from pandas must be converted to None for Pydantic
+    def _clean(val: object) -> str | None:
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return None
+        return str(val)
+
     papers: dict[str, PaperMetadata] = {}
     if not oa_df.empty:
         for _, row in oa_df.iterrows():
-            if not row.get("abstract") or not row.get("title"):
+            abstract = _clean(row.get("abstract"))
+            title = _clean(row.get("title"))
+            if not abstract or not title:
                 continue
-            doi = row.get("doi")
-            key = doi or row.get("pmid") or row["id"]
+            doi = _clean(row.get("doi"))
+            pmid = _clean(row.get("pmid"))
+            key = doi or pmid or row["id"]
             papers[key] = PaperMetadata(
                 doi=doi,
-                pmid=row.get("pmid"),
-                title=row["title"],
+                pmid=pmid,
+                title=title,
                 authors=_parse_authors(row.get("authors")),
-                journal=row.get("journal"),
+                journal=_clean(row.get("journal")),
                 publication_date=str(row.get("publication_date", "")),
-                abstract=row["abstract"],
+                abstract=abstract,
             )
 
     # PubMed EFetch
