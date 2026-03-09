@@ -51,7 +51,7 @@ def initialize_team(session_state: dict) -> Team:
         share_member_interactions=True,  # All agents see each other's outputs as context
         enable_agentic_memory=True,
         enable_user_memories=True,
-        read_team_history=True,
+        read_chat_history=True,
         show_members_responses=False,  # Do not show raw individual agents' answers directly to the user
         delegate_task_to_all_members=False,
         markdown=True,
