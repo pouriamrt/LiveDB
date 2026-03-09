@@ -1,6 +1,6 @@
-# LiveDB ETL — Continuous Literature Ingestion, Triage, and Vectorized Indexing
+# LiveDB — Continuous Literature Ingestion, Gap Analysis, and Multi-Agent Research Assistant
 
-A production-ready async pipeline that **discovers the latest biomedical papers**, **classifies abstracts for PICOS-style eligibility**, **acquires legal full-text (PDF or BioC fallback)**, **ingests chunked content into a pgvector-backed knowledge base**, **and exposes a multi-agent research assistant layer (Knowledge / SQL / Reasoning / General) coordinated via Agno Team/AgentOS** for retrieval-augmented applications and interactive post-indexing querying.
+A production-ready async pipeline that **discovers the latest biomedical papers**, **classifies abstracts for PICOS-style eligibility**, **acquires legal full-text**, **ingests into a pgvector-backed knowledge base**, **identifies research gaps via LLM-powered analysis**, and **exposes a multi-agent research assistant** (Knowledge / SQL / Reasoning / General / Gap Analysis) coordinated via Agno Team/AgentOS.
 
 ---
 
@@ -9,12 +9,13 @@ A production-ready async pipeline that **discovers the latest biomedical papers*
 - [Key Features](#key-features)
 - [Architecture](#architecture)
 - [Data Flow](#data-flow)
+- [Gap Analysis](#gap-analysis)
 - [Repository Layout](#repository-layout)
 - [Quick Start](#quick-start)
   - [Prerequisites](#prerequisites)
   - [Environment Variables](#environment-variables)
   - [Install](#install)
-  - [Run the Flow](#run-the-flow)
+  - [Run](#run)
 - [Configuration](#configuration)
 - [ETL Details](#etl-details)
   - [OpenAlex Fetch](#openalex-fetch)
@@ -40,7 +41,9 @@ A production-ready async pipeline that **discovers the latest biomedical papers*
 
 ## Overview
 
-**LiveDB ETL** continuously surfaces recent literature for a given query (e.g., *“dementia”*), performs **eligibility triage** using a fine-tuned multi-head classifier over a transformer encoder, **downloads or reconstructs full-text**, **indexes** results into a Postgres/pgvector-backed knowledge base wrapped by **Agno** abstractions (vector DB + contents DB), **and then exposes that indexed corpus through a multi-agent research assistant layer** (Knowledge / SQL / Reasoning / General) coordinated via Agno `Team` + `AgentOS`.
+**LiveDB** continuously surfaces recent literature for a given query, performs **eligibility triage** using a fine-tuned multi-head classifier, **downloads full-text**, **indexes** into a pgvector-backed knowledge base, and exposes that corpus through a **multi-agent research assistant layer** coordinated via Agno `Team` + `AgentOS`.
+
+It also includes a standalone **Gap Analysis** pipeline that takes a natural language research question, live-fetches papers from OpenAlex and PubMed, clusters them by theme, and uses LLM reasoning to identify research gaps — producing interactive HTML dashboards and PDF reports.
 
 It is designed to be:
 - **Asynchronous & resilient** (httpx, asyncio, tenacity retries; bounded concurrency for downloads)
@@ -48,6 +51,7 @@ It is designed to be:
 - **RAG-ready** (semantic chunking; reference removal; pgvector hybrid search)
 - **Operable** (Prefect orchestration, structured logging, configurable concurrency)
 - **Agentic** (specialist agents + coordinator for interactive post-indexing querying)
+- **Gap-aware** (LLM-powered research gap identification with interactive reports)
 
 ---
 
@@ -69,8 +73,11 @@ It is designed to be:
 - **Orchestration & Observability**
   - **Prefect** flow with caching, retries, bounded concurrency, and rotating log files.
 - **Agentic post-indexing interface**
-  - 4 specialist agents (**Knowledge / SQL / Reasoning / General**) coordinated via Agno `Team` + `AgentOS`.
+  - 5 specialist agents (**Knowledge / SQL / Reasoning / General / Gap Analysis**) coordinated via Agno `Team` + `AgentOS`.
   - Makes the ingested corpus queryable immediately after ingestion (RAG-style, but without re-fetching PDFs).
+- **Research gap analysis**
+  - Natural language query → live paper fetch → structured extraction → thematic clustering → LLM gap identification.
+  - Outputs interactive HTML dashboard (Chart.js), PDF report, and JSON for programmatic access.
 
 ---
 
@@ -139,16 +146,92 @@ It is designed to be:
 
 ---
 
+## Gap Analysis
+
+The gap analysis pipeline takes a **natural language research question** and produces a structured report identifying contradictions, under-explored areas, methodological limitations, population gaps, missing comparisons, and future research directions.
+
+### Pipeline Phases
+
+```
+User Question ──► Query Translation ──► Fetch Papers ──► Extract Findings ──► Cluster Themes ──► Analyze Gaps ──► Reports
+  (natural          (LLM → 2-4           (OpenAlex +      (Batched LLM        (UMAP + HDBSCAN    (Two-pass LLM     (HTML +
+   language)         keywords)            PubMed)          JSON extraction)    + LLM labeling)     gap analysis)      PDF + JSON)
+```
+
+| Phase | Module | Description |
+|-------|--------|-------------|
+| 0 | `fetch.py:translate_query` | LLM converts natural language into 2-4 optimized keyword queries |
+| 1 | `fetch.py:fetch_papers` | Parallel fetch from OpenAlex + PubMed, deduplicate, optional PICOS filter |
+| 2 | `extract.py:extract_papers` | Batched LLM extraction of claims, methodology, PICO elements, limitations |
+| 3 | `cluster.py:cluster_papers` | OpenAI embeddings → UMAP reduction → HDBSCAN clustering → LLM theme labels |
+| 4 | `analyze.py:analyze_gaps` | Within-cluster gap analysis (parallel) + cross-cluster synthesis (single call) |
+| 5 | `report.py` | Interactive HTML dashboard (Chart.js), styled PDF, machine-readable JSON |
+
+### Gap Types Identified
+
+- **Contradiction** — findings that disagree across papers
+- **Under-explored** — subtopics with insufficient investigation
+- **Methodological** — limitations in study designs used
+- **Population** — demographics or patient groups not covered
+- **Missing comparison** — interventions not compared head-to-head
+- **Future direction** — what authors explicitly say needs more research
+
+### Usage
+
+**CLI (Option 3):**
+```bash
+python main.py
+# Select [3] Gap Analysis → enter research question → configure scope
+```
+
+**API:**
+```bash
+# Trigger analysis (returns immediately, runs in background)
+curl -X POST http://localhost:7777/gap-analysis \
+  -H "Content-Type: application/json" \
+  -d '{"query": "mRNA vaccines for cancer immunotherapy", "max_records": 100, "days_back": 180}'
+
+# List reports
+curl http://localhost:7777/gap-analysis
+
+# View interactive dashboard
+curl http://localhost:7777/gap-analysis/{report_id}
+```
+
+### Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `GAP_LLM_BATCH_SIZE` | 5 | Papers per LLM extraction call |
+| `GAP_LLM_CONCURRENCY` | 5 | Max concurrent LLM calls |
+| `GAP_DEFAULT_SCOPE` | 100 | Default number of papers to analyze |
+| `GAP_DEFAULT_DAYS` | 180 | Default lookback window in days |
+| `GAP_REPORTS_DB_URL` | same as `PGVECTOR_CONTENTS_URL` | Postgres URL for gap reports storage |
+
+---
+
 ## Repository Layout
 
 ```
 agents/
   Agents.py              # single-agent definitions & entrypoints
-  RunTeam.py             # orchestrates multi-agent execution (Team run)
+  RunTeam.py             # orchestrates multi-agent execution + gap analysis routes
   Teams.py               # team definitions, roles, routing rules / topology
 dbs/
-  IngestToDB.py          # Agno Knowledge setup + async ingestion
+  IngestToDB.py          # Agno Knowledge setup + async ingestion + gap report storage
   utils.py               # CustomChunking (SemanticChunking subclass)
+gap_analysis/
+  __init__.py            # shared AsyncOpenAI client
+  models.py              # Pydantic models (PaperMetadata, PaperExtraction, ThemeCluster, ResearchGap, GapReport)
+  prompts.py             # LLM prompt templates for all phases
+  fetch.py               # Phase 0-1: query translation + multi-source paper fetching
+  extract.py             # Phase 2: batched LLM structured extraction
+  cluster.py             # Phase 3: UMAP + HDBSCAN clustering + LLM theme labeling
+  analyze.py             # Phase 4: within-cluster + cross-cluster gap analysis
+  report.py              # Phase 5: PDF + HTML report generation
+  pipeline.py            # Prefect flow orchestrating all phases
+  templates/
+    dashboard.html       # Jinja2 interactive dashboard template (Chart.js)
 livedb/
   CheckAbsModel.py       # Multi-head classifier load + async inference
   GetLatestPapers.py     # PubMed/PMC helpers, FTP, BioC -> PDF, utilities
@@ -157,7 +240,7 @@ livedb/
 .gitignore
 .python-version
 Config.py                # Pydantic config model + env var binding
-main.py                  # Prefect flow: end-to-end ETL
+main.py                  # Prefect flow: ETL [1], Agent [2], Gap Analysis [3]
 ```
 
 ---
@@ -220,25 +303,23 @@ python -m pip install --upgrade pip
 # Core deps (pin versions as needed)
 pip install httpx[http2] tenacity arrow lxml aiofiles aioftp pandas loguru pydantic python-dotenv \
             reportlab tqdm prefect playwright playwright-stealth torch transformers \
-            agno pgvector psycopg[binary] sqlalchemy
+            agno pgvector psycopg[binary] sqlalchemy \
+            openai hdbscan umap-learn scikit-learn jinja2
 
 # Install browser binaries for Playwright
 python -m playwright install chromium
 ```
 
-### Run the Flow
+### Run
 
 ```bash
-# Optional: run a temporary Prefect server (local)
-prefect server start  # in a separate terminal
-
-# Execute the ETL flow
-python -m main  # or: python main.py
-
-# Pass custom args by editing defaults in livedb_flow(...)
+python main.py
+# [1] ETL Pipeline — fetch, triage, download, and ingest papers
+# [2] AI Agent    — start FastAPI + AgentOS on http://localhost:7777
+# [3] Gap Analysis — identify research gaps from a natural language question
 ```
 
-Default behavior pulls a **small window** of recent “dementia” papers, triages, downloads, and ingests.
+Optionally run `prefect server start` in a separate terminal for flow visualization.
 
 ---
 
@@ -344,7 +425,7 @@ You should provision:
 
 ## Agents
 
-This build includes a coordinator team with four specialist agents and shared state/backends:
+This build includes a coordinator team with five specialist agents and shared state/backends:
 
 - **KnowledgeAgent**
   - Uses a `Knowledge` base backed by **PgVector** (hybrid search) and a contents Postgres store.
@@ -363,10 +444,14 @@ This build includes a coordinator team with four specialist agents and shared st
 - **GeneralAgent**
   - Handles broad queries or synthesizes outputs from other agents into a single response.
 
+- **GapAnalysisAgent**
+  - Queries past gap analysis reports stored in Postgres.
+  - Answers questions about previously identified research gaps, themes, and trends.
+
 ### Coordination
 
 - **ResearchAssistantTeam** (coordinator)
-  - Routes by intent: Knowledge → *KnowledgeAgent*; SQL → *SQLAgent*; Reasoning → *ReasoningAgent*; otherwise → *GeneralAgent*.
+  - Routes by intent: Knowledge → *KnowledgeAgent*; SQL → *SQLAgent*; Reasoning → *ReasoningAgent*; Gap Analysis → *GapAnalysisAgent*; otherwise → *GeneralAgent*.
   - Aggregates members’ findings into one coherent answer with clickable citations.
   - Shares interactions among members for context; leverages conversation memory.
   - Agent runtime exposed via `AgentOS` (`run_team(session_state)` returns `(AgentOS, FastAPI app)`).
@@ -419,10 +504,13 @@ This project is licensed under the **MIT License**.
 
 ## Citations & Attribution
 
-- **OpenAlex** — community‑maintained index of scholarly works  
-- **NCBI E‑utils / PubMed / PMC OA** — programmatic biomedical literature access  
-- **Agno** — abstraction layer for: Postgres-backed knowledge, pgvector hybrid search, agent memory, and team orchestration   
-- **pgvector** — high‑dimensional vector similarity for Postgres  
-- **Playwright** and **playwright‑stealth** — browser automation for bot‑gated flows  
-- **ReportLab** — PDF generation for BioC text fallback
+- **OpenAlex** — community‑maintained index of scholarly works
+- **NCBI E‑utils / PubMed / PMC OA** — programmatic biomedical literature access
+- **Agno** — abstraction layer for: Postgres-backed knowledge, pgvector hybrid search, agent memory, and team orchestration
+- **pgvector** — high‑dimensional vector similarity for Postgres
+- **Playwright** and **playwright‑stealth** — browser automation for bot‑gated flows
+- **ReportLab** — PDF generation for BioC text fallback and gap analysis reports
+- **HDBSCAN** — density-based clustering for thematic grouping
+- **UMAP** — dimensionality reduction for embedding-based clustering
+- **Chart.js** — interactive visualizations in gap analysis dashboards
 
