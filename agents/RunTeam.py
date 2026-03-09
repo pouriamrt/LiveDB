@@ -163,6 +163,17 @@ def _register_gap_routes(app: FastAPI) -> None:
         return {"report_id": report_id, "status": "pending"}
 
 
+async def _ensure_db_tables() -> None:
+    """Create required tables at startup so agents can query them."""
+    try:
+        async with await psycopg.AsyncConnection.connect(
+            config.GAP_REPORTS_DB_URL
+        ) as conn:
+            await ensure_gap_reports_table(conn)
+    except Exception as e:
+        log.warning(f"Could not ensure gap_reports table at startup: {e}")
+
+
 def run_team(session_state: dict) -> tuple[AgentOS, FastAPI]:
     team = initialize_team(session_state)
     agent_os = AgentOS(
@@ -171,4 +182,9 @@ def run_team(session_state: dict) -> tuple[AgentOS, FastAPI]:
     )
     app = agent_os.get_app()
     _register_gap_routes(app)
+
+    @app.on_event("startup")
+    async def _startup():
+        await _ensure_db_tables()
+
     return agent_os, app
