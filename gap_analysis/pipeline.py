@@ -11,7 +11,7 @@ from prefect import flow
 from gap_analysis.analyze import analyze_gaps
 from gap_analysis.cluster import cluster_papers
 from gap_analysis.extract import extract_papers
-from gap_analysis.fetch import fetch_papers, translate_query
+from gap_analysis.fetch import FilterMode, fetch_papers, translate_query
 from gap_analysis.models import GapReport
 from gap_analysis.report import generate_dashboard_html, generate_pdf
 
@@ -21,7 +21,8 @@ async def gap_analysis_flow(
     query: str,
     max_records: int = 100,
     days_back: int = 180,
-    run_picos: bool = True,
+    filter_mode: FilterMode = FilterMode.PICOS,
+    filter_description: str = "",
     model: str | None = None,
     output_dir: str = "reports",
 ) -> GapReport:
@@ -29,6 +30,8 @@ async def gap_analysis_flow(
 
     Args:
         days_back: How many days back from today to search.
+        filter_mode: How to filter papers — "picos" (model), "llm" (description), or "none".
+        filter_description: Required when filter_mode is "llm". Describes which papers to include.
     """
     log.info(f"Starting gap analysis for: {query} (max {max_records} papers)")
 
@@ -48,7 +51,9 @@ async def gap_analysis_flow(
         max_records=max_records,
         start_day=0,
         days_back=days_back,
-        run_picos=run_picos,
+        filter_mode=filter_mode,
+        filter_description=filter_description,
+        model=model,
     )
     if not papers:
         log.warning("No papers found — aborting")

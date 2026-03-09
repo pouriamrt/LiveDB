@@ -15,10 +15,16 @@ from gap_analysis.report import generate_dashboard_html
 
 
 async def _run_gap_pipeline(
-    report_id: str, query: str, max_records: int, days_back: int
+    report_id: str,
+    query: str,
+    max_records: int,
+    days_back: int,
+    filter_mode: str = "picos",
+    filter_description: str = "",
 ) -> None:
     """Run gap analysis pipeline in background and store the result."""
     from dbs.IngestToDB import store_gap_report
+    from gap_analysis.fetch import FilterMode
     from gap_analysis.pipeline import gap_analysis_flow
 
     try:
@@ -35,6 +41,8 @@ async def _run_gap_pipeline(
             query=query,
             max_records=max_records,
             days_back=days_back,
+            filter_mode=FilterMode(filter_mode),
+            filter_description=filter_description,
         )
         # Overwrite the auto-generated id so it matches the one we returned
         report.id = report_id
@@ -118,7 +126,15 @@ def _register_gap_routes(app: FastAPI) -> None:
 
         max_records = body.get("max_records", config.GAP_DEFAULT_SCOPE)
         days_back = body.get("days_back", config.GAP_DEFAULT_DAYS)
+        filter_mode = body.get("filter_mode", "picos")
+        filter_description = body.get("filter_description", "")
         report_id = str(uuid.uuid4())
+
+        if filter_mode not in ("picos", "llm", "none"):
+            return JSONResponse(
+                content={"error": "filter_mode must be 'picos', 'llm', or 'none'"},
+                status_code=400,
+            )
 
         # Create a placeholder row so the list endpoint shows it immediately
         async with await psycopg.AsyncConnection.connect(
@@ -135,7 +151,13 @@ def _register_gap_routes(app: FastAPI) -> None:
             await conn.commit()
 
         background_tasks.add_task(
-            _run_gap_pipeline, report_id, query, max_records, days_back
+            _run_gap_pipeline,
+            report_id,
+            query,
+            max_records,
+            days_back,
+            filter_mode,
+            filter_description,
         )
 
         return {"report_id": report_id, "status": "pending"}

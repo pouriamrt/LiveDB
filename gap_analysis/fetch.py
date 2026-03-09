@@ -1,18 +1,31 @@
-"""Phase 1: Fetch papers from OpenAlex + PubMed, deduplicate, PICOS filter."""
+"""Phase 1: Fetch papers from OpenAlex + PubMed, deduplicate, filter."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+from enum import Enum
 
 import pandas as pd
 from loguru import logger as log
 
 from gap_analysis.models import PaperMetadata
-from gap_analysis.prompts import QUERY_TRANSLATE_SYSTEM, QUERY_TRANSLATE_USER
-from livedb.CheckAbsModel import check_abs_model_async
+from gap_analysis.prompts import (
+    FILTER_SYSTEM,
+    FILTER_USER,
+    QUERY_TRANSLATE_SYSTEM,
+    QUERY_TRANSLATE_USER,
+)
 from livedb.GetLatestPapers import pubmed_efetch, pubmed_esearch
 from livedb.OpenAlexDownload import fetch_openalex_latest
+
+
+class FilterMode(str, Enum):
+    """How to filter fetched papers before analysis."""
+
+    NONE = "none"  # Include all papers
+    PICOS = "picos"  # Use DistilBERT PICOS classifier
+    LLM = "llm"  # Use LLM with a user-provided description
 
 
 async def translate_query(user_input: str, model: str | None = None) -> list[str]:
@@ -60,7 +73,9 @@ async def fetch_papers(
     max_records: int = 100,
     start_day: int = 0,
     days_back: int = 180,
-    run_picos: bool = True,
+    filter_mode: FilterMode = FilterMode.PICOS,
+    filter_description: str = "",
+    model: str | None = None,
 ) -> list[PaperMetadata]:
     """Fetch from both sources for each query, deduplicate, optionally PICOS filter."""
 
@@ -157,22 +172,94 @@ async def fetch_papers(
 
     result = list(papers.values())
 
-    # Optional PICOS filter
-    if run_picos and result:
-        filtered = []
-        for paper in result:
-            try:
-                text = paper.title + "\n" + paper.abstract
-                preds, _ = await check_abs_model_async(text)
-                # preds values are lists, e.g. {"S_AB_pred": ["no"]}
-                s_ab = preds.get("S_AB_pred", [])
-                if s_ab and s_ab[0] == "no":
-                    continue
-                filtered.append(paper)
-            except Exception as e:
-                log.warning(f"PICOS check failed for '{paper.title[:50]}': {e}")
-                filtered.append(paper)  # include on failure
-        log.info(f"PICOS filter: {len(result)} → {len(filtered)} papers")
-        result = filtered
+    if filter_mode == FilterMode.NONE or not result:
+        return result
+
+    if filter_mode == FilterMode.PICOS:
+        result = await _filter_picos(result)
+    elif filter_mode == FilterMode.LLM:
+        result = await _filter_llm(result, filter_description, model)
 
     return result
+
+
+async def _filter_picos(papers: list[PaperMetadata]) -> list[PaperMetadata]:
+    """Filter papers using the DistilBERT PICOS classifier."""
+    from livedb.CheckAbsModel import check_abs_model_async
+
+    filtered = []
+    for paper in papers:
+        try:
+            text = paper.title + "\n" + paper.abstract
+            preds, _ = await check_abs_model_async(text)
+            s_ab = preds.get("S_AB_pred", [])
+            if s_ab and s_ab[0] == "no":
+                continue
+            filtered.append(paper)
+        except Exception as e:
+            log.warning(f"PICOS check failed for '{paper.title[:50]}': {e}")
+            filtered.append(paper)
+    log.info(f"PICOS filter: {len(papers)} → {len(filtered)} papers")
+    return filtered
+
+
+async def _filter_llm(
+    papers: list[PaperMetadata],
+    description: str,
+    model: str | None = None,
+) -> list[PaperMetadata]:
+    """Filter papers using LLM relevance judgment against a user description."""
+    from Config import config
+    from gap_analysis import openai_client
+
+    model = model or config.MODEL_NAME
+    batch_size = config.GAP_LLM_BATCH_SIZE
+    sem = asyncio.Semaphore(config.GAP_LLM_CONCURRENCY)
+
+    async def _judge_batch(batch: list[PaperMetadata]) -> list[bool]:
+        papers_text = "\n\n".join(
+            f"--- Paper {i + 1} ---\nTitle: {p.title}\nAbstract: {p.abstract}"
+            for i, p in enumerate(batch)
+        )
+        async with sem:
+            try:
+                resp = await openai_client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": FILTER_SYSTEM},
+                        {
+                            "role": "user",
+                            "content": FILTER_USER.format(
+                                filter_description=description,
+                                count=len(batch),
+                                papers=papers_text,
+                            ),
+                        },
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.1,
+                )
+                raw = json.loads(resp.choices[0].message.content)
+                if isinstance(raw, list):
+                    items = raw
+                else:
+                    items = next(
+                        (v for v in raw.values() if isinstance(v, list)), [raw]
+                    )
+                return [item.get("relevant", True) for item in items]
+            except Exception as e:
+                log.warning(f"LLM filter batch failed: {e}")
+                return [True] * len(batch)  # include on failure
+
+    batches = [papers[i : i + batch_size] for i in range(0, len(papers), batch_size)]
+    tasks = [_judge_batch(batch) for batch in batches]
+    results = await asyncio.gather(*tasks)
+
+    filtered = []
+    for batch, relevance in zip(batches, results):
+        for paper, is_relevant in zip(batch, relevance):
+            if is_relevant:
+                filtered.append(paper)
+
+    log.info(f"LLM filter: {len(papers)} → {len(filtered)} papers")
+    return filtered

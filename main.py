@@ -230,20 +230,43 @@ if __name__ == "__main__":
     elif c == "3":
         from rich.prompt import IntPrompt
 
+        from gap_analysis.fetch import FilterMode
         from gap_analysis.pipeline import gap_analysis_flow
 
         query = Prompt.ask("Research topic")
         max_papers = IntPrompt.ask("Max papers to analyze", default=100)
         days = IntPrompt.ask("Days to look back", default=180)
 
+        console.print(
+            Panel(
+                "[1] PICOS model — filter using DistilBERT classifier\n"
+                "[2] LLM filter — describe which papers to include\n"
+                "[3] None — include all papers",
+                title="Abstract Filtering",
+            )
+        )
+        filter_choice = Prompt.ask("Filter mode", choices=["1", "2", "3"], default="1")
+        filter_mode = FilterMode.PICOS
+        filter_description = ""
+        if filter_choice == "2":
+            filter_mode = FilterMode.LLM
+            filter_description = Prompt.ask("Describe which papers to include")
+        elif filter_choice == "3":
+            filter_mode = FilterMode.NONE
+
         console.print(f"\nAnalyzing gaps in: [bold]{query}[/bold]")
-        console.print(f"Scope: {max_papers} papers, last {days} days\n")
+        console.print(
+            f"Scope: {max_papers} papers, last {days} days, "
+            f"filter: {filter_mode.value}\n"
+        )
 
         report = asyncio.run(
             gap_analysis_flow(
                 query=query,
                 max_records=max_papers,
                 days_back=days,
+                filter_mode=filter_mode,
+                filter_description=filter_description,
             )
         )
         console.print(

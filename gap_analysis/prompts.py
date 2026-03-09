@@ -23,6 +23,32 @@ Convert this research question into search queries:
 "{user_input}"
 """
 
+FILTER_SYSTEM = """\
+You are a biomedical literature relevance judge. Given a paper's title and \
+abstract, decide whether it is relevant to the user's research scope.
+
+The user will provide a description of what papers they want to include. \
+Evaluate each paper against that description.
+
+For each paper, return:
+{
+  "title": "exact paper title",
+  "relevant": true or false,
+  "reason": "one sentence explaining why"
+}
+
+Return JSON: {{"papers": [...]}}
+"""
+
+FILTER_USER = """\
+Include papers that match this description:
+"{filter_description}"
+
+Evaluate these {count} papers:
+
+{papers}
+"""
+
 EXTRACTION_SYSTEM = """\
 You are a biomedical research analyst. Extract structured findings from each \
 paper abstract provided. Return a JSON array where each element matches the \
