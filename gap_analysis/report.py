@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from loguru import logger as log
 from reportlab.lib import colors
@@ -71,15 +72,15 @@ def generate_pdf(report: GapReport, output_path: str) -> str:
 
     # Executive Summary
     elements.append(Paragraph("1. Executive Summary", heading_style))
-    elements.append(Paragraph(report.executive_summary or "N/A", body_style))
+    elements.append(Paragraph(escape(report.executive_summary or "N/A"), body_style))
     elements.append(Spacer(1, 0.2 * inch))
 
     # Research Landscape
     elements.append(Paragraph("2. Research Landscape", heading_style))
     elements.append(Paragraph("<b>Methodology Overview</b>", body_style))
-    elements.append(Paragraph(report.methodology_overview or "N/A", body_style))
+    elements.append(Paragraph(escape(report.methodology_overview or "N/A"), body_style))
     elements.append(Paragraph("<b>Population Coverage</b>", body_style))
-    elements.append(Paragraph(report.population_overview or "N/A", body_style))
+    elements.append(Paragraph(escape(report.population_overview or "N/A"), body_style))
 
     # Theme table
     if report.themes:
@@ -108,26 +109,27 @@ def generate_pdf(report: GapReport, output_path: str) -> str:
         color = SEVERITY_COLORS.get(gap.severity, "#999")
         elements.append(
             Paragraph(
-                f'<font color="{color}">[{gap.severity.upper()}]</font> '
-                f"<b>{gap.gap_type}</b>: {gap.title}",
+                f'<font color="{color}">[{escape(gap.severity.upper())}]</font> '
+                f"<b>{escape(gap.gap_type)}</b>: {escape(gap.title)}",
                 body_style,
             )
         )
-        elements.append(Paragraph(gap.description, body_style))
+        elements.append(Paragraph(escape(gap.description), body_style))
         if gap.evidence:
-            evidence_text = ", ".join(gap.evidence[:5])
+            evidence_text = ", ".join(escape(e) for e in gap.evidence[:5])
             elements.append(Paragraph(f"<i>Evidence: {evidence_text}</i>", body_style))
         if gap.suggested_research:
             elements.append(
                 Paragraph(
-                    f"<i>Suggested research: {gap.suggested_research}</i>", body_style
+                    f"<i>Suggested research: {escape(gap.suggested_research)}</i>",
+                    body_style,
                 )
             )
         elements.append(Spacer(1, 0.1 * inch))
 
     # Conclusion
     elements.append(Paragraph("4. Conclusion &amp; Priorities", heading_style))
-    elements.append(Paragraph(report.conclusion or "N/A", body_style))
+    elements.append(Paragraph(escape(report.conclusion or "N/A"), body_style))
 
     # Appendix
     elements.append(Spacer(1, 0.3 * inch))

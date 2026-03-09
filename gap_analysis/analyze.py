@@ -6,9 +6,8 @@ import asyncio
 import json
 
 from loguru import logger as log
-from openai import AsyncOpenAI
-
 from Config import config
+from gap_analysis import openai_client as _client
 from gap_analysis.models import GapReport, ResearchGap, ThemeCluster
 from gap_analysis.prompts import (
     CROSS_CLUSTER_SYSTEM,
@@ -16,8 +15,6 @@ from gap_analysis.prompts import (
     WITHIN_CLUSTER_SYSTEM,
     WITHIN_CLUSTER_USER,
 )
-
-_client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
 
 
 def _format_papers_for_prompt(cluster: ThemeCluster) -> str:

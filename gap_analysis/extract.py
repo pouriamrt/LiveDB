@@ -6,19 +6,15 @@ import asyncio
 import json
 
 from loguru import logger as log
-from openai import AsyncOpenAI
 
 from Config import config
+from gap_analysis import openai_client as _client
 from gap_analysis.models import PaperExtraction, PaperMetadata
 from gap_analysis.prompts import EXTRACTION_SYSTEM, EXTRACTION_USER
 
-_client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
-
-LLM_SEM = asyncio.Semaphore(5)  # max concurrent LLM calls
-
 
 async def _extract_batch(
-    papers: list[PaperMetadata], model: str
+    papers: list[PaperMetadata], model: str, sem: asyncio.Semaphore
 ) -> list[PaperExtraction]:
     """Extract structured findings from a batch of papers via LLM."""
     papers_text = "\n\n".join(
@@ -26,7 +22,7 @@ async def _extract_batch(
         for i, p in enumerate(papers)
     )
 
-    async with LLM_SEM:
+    async with sem:
         try:
             resp = await _client.chat.completions.create(
                 model=model,
@@ -52,6 +48,13 @@ async def _extract_batch(
             log.warning(f"Batch extraction failed: {e}")
             return []
 
+    # I2: Warn when LLM returns different number of items than the batch size
+    if len(items) != len(papers):
+        log.warning(
+            f"Batch count mismatch: sent {len(papers)} papers but LLM returned "
+            f"{len(items)} items — some papers may be dropped"
+        )
+
     extractions = []
     for paper, item in zip(papers, items):
         try:
@@ -75,15 +78,18 @@ async def _extract_batch(
 
 async def extract_papers(
     papers: list[PaperMetadata],
-    batch_size: int = 5,
+    batch_size: int = config.GAP_LLM_BATCH_SIZE,
     model: str | None = None,
 ) -> list[PaperExtraction]:
     """Extract structured findings from all papers in batches."""
     model = model or config.MODEL_NAME
+    # C3: Create semaphore inside the function so it's bound to the current event loop
+    sem = asyncio.Semaphore(config.GAP_LLM_CONCURRENCY)
+
     batches = [papers[i : i + batch_size] for i in range(0, len(papers), batch_size)]
     log.info(f"Extracting findings from {len(papers)} papers in {len(batches)} batches")
 
-    tasks = [_extract_batch(batch, model) for batch in batches]
+    tasks = [_extract_batch(batch, model, sem) for batch in batches]
     results = await asyncio.gather(*tasks)
 
     extractions = [ext for batch_result in results for ext in batch_result]

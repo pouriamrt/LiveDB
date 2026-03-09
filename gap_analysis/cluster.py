@@ -8,13 +8,10 @@ import json
 import numpy as np
 from hdbscan import HDBSCAN
 from loguru import logger as log
-from openai import AsyncOpenAI
-
 from Config import config
+from gap_analysis import openai_client as _client
 from gap_analysis.models import PaperExtraction, ThemeCluster
 from gap_analysis.prompts import CLUSTER_LABEL_SYSTEM, CLUSTER_LABEL_USER
-
-_client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
 
 
 async def _embed_texts(texts: list[str]) -> np.ndarray:
@@ -102,13 +99,16 @@ async def cluster_papers(
 
     # Assign noise papers to nearest cluster
     if noise_papers and clusters_dict:
+        # Pre-build lookup: id(extraction) -> index for O(1) access
+        ext_index = {id(ext): i for i, ext in enumerate(extractions)}
+
         centroids = {}
         for cid, papers in clusters_dict.items():
             indices = [i for i, lbl in enumerate(labels) if lbl == cid]
             centroids[cid] = embeddings[indices].mean(axis=0)
 
         for paper in noise_papers:
-            idx = extractions.index(paper)
+            idx = ext_index[id(paper)]
             emb = embeddings[idx]
             nearest = min(centroids, key=lambda c: np.linalg.norm(emb - centroids[c]))
             clusters_dict[nearest].append(paper)

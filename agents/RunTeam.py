@@ -1,4 +1,3 @@
-import asyncio
 import json
 import uuid
 
@@ -10,6 +9,7 @@ from loguru import logger as log
 
 from agents.Teams import initialize_team
 from Config import config
+from dbs.IngestToDB import ensure_gap_reports_table
 from gap_analysis.models import GapReport
 from gap_analysis.report import generate_dashboard_html
 
@@ -63,20 +63,7 @@ def _register_gap_routes(app: FastAPI) -> None:
         async with await psycopg.AsyncConnection.connect(
             config.GAP_REPORTS_DB_URL
         ) as conn:
-            await conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS gap_reports (
-                    id TEXT PRIMARY KEY,
-                    query TEXT NOT NULL,
-                    created_at TIMESTAMPTZ DEFAULT NOW(),
-                    scope INTEGER,
-                    report_json JSONB,
-                    executive_summary TEXT,
-                    status TEXT DEFAULT 'completed'
-                )
-                """,
-            )
-            await conn.commit()
+            await ensure_gap_reports_table(conn)
             cur = await conn.execute(
                 """
                 SELECT id, query, created_at, scope, executive_summary, status
@@ -137,19 +124,7 @@ def _register_gap_routes(app: FastAPI) -> None:
         async with await psycopg.AsyncConnection.connect(
             config.GAP_REPORTS_DB_URL
         ) as conn:
-            await conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS gap_reports (
-                    id TEXT PRIMARY KEY,
-                    query TEXT NOT NULL,
-                    created_at TIMESTAMPTZ DEFAULT NOW(),
-                    scope INTEGER,
-                    report_json JSONB,
-                    executive_summary TEXT,
-                    status TEXT DEFAULT 'completed'
-                )
-                """,
-            )
+            await ensure_gap_reports_table(conn)
             await conn.execute(
                 """
                 INSERT INTO gap_reports (id, query, scope, status)
@@ -160,10 +135,7 @@ def _register_gap_routes(app: FastAPI) -> None:
             await conn.commit()
 
         background_tasks.add_task(
-            asyncio.to_thread,
-            lambda: asyncio.run(
-                _run_gap_pipeline(report_id, query, max_records, start_day)
-            ),
+            _run_gap_pipeline, report_id, query, max_records, start_day
         )
 
         return {"report_id": report_id, "status": "pending"}

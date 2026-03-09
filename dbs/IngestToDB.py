@@ -100,28 +100,41 @@ async def ingest_to_db_async(records):
     return True
 
 
+async def ensure_gap_reports_table(conn) -> None:
+    """Create the gap_reports table if it does not exist."""
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS gap_reports (
+            id TEXT PRIMARY KEY,
+            query TEXT NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            scope INTEGER,
+            report_json JSONB,
+            executive_summary TEXT,
+            status TEXT DEFAULT 'completed'
+        )
+        """,
+    )
+    await conn.commit()
+
+
 async def store_gap_report(report) -> None:
-    """Store a GapReport in the gap_reports table."""
+    """Store a GapReport in the gap_reports table (upsert)."""
     import psycopg
 
     async with await psycopg.AsyncConnection.connect(config.GAP_REPORTS_DB_URL) as conn:
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS gap_reports (
-                id TEXT PRIMARY KEY,
-                query TEXT NOT NULL,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                scope INTEGER,
-                report_json JSONB,
-                executive_summary TEXT,
-                status TEXT DEFAULT 'completed'
-            )
-            """,
-        )
+        await ensure_gap_reports_table(conn)
         await conn.execute(
             """
             INSERT INTO gap_reports (id, query, created_at, scope, report_json, executive_summary, status)
             VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                query = EXCLUDED.query,
+                created_at = EXCLUDED.created_at,
+                scope = EXCLUDED.scope,
+                report_json = EXCLUDED.report_json,
+                executive_summary = EXCLUDED.executive_summary,
+                status = EXCLUDED.status
             """,
             (
                 report.id,
