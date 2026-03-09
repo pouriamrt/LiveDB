@@ -53,7 +53,7 @@ def initialize_team(session_state: dict) -> Team:
         enable_user_memories=True,
         read_chat_history=True,
         show_members_responses=False,  # Do not show raw individual agents' answers directly to the user
-        delegate_task_to_all_members=False,
+        delegate_to_all_members=False,
         markdown=True,
         add_member_tools_to_context=True,
         add_memories_to_context=True,
