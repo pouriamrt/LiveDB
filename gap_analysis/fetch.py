@@ -39,7 +39,7 @@ async def fetch_papers(
         days_back=days_back,
         max_records=max_records,
         only_articles=True,
-        only_oa=False,
+        only_oa=True,
     )
     pm_task = pubmed_esearch(
         query, days_back=days_back, start_day=start_day, retmax=max_records
