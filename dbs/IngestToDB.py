@@ -98,3 +98,40 @@ async def ingest_to_db_async(records):
         f"Successfully processed {success_count} records, failed to process {failed_count} records"
     )
     return True
+
+
+async def store_gap_report(report) -> None:
+    """Store a GapReport in the gap_reports table."""
+    import psycopg
+
+    async with await psycopg.AsyncConnection.connect(config.GAP_REPORTS_DB_URL) as conn:
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS gap_reports (
+                id TEXT PRIMARY KEY,
+                query TEXT NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                scope INTEGER,
+                report_json JSONB,
+                executive_summary TEXT,
+                status TEXT DEFAULT 'completed'
+            )
+            """,
+        )
+        await conn.execute(
+            """
+            INSERT INTO gap_reports (id, query, created_at, scope, report_json, executive_summary, status)
+            VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s)
+            """,
+            (
+                report.id,
+                report.query,
+                report.created_at,
+                report.scope,
+                report.model_dump_json(),
+                report.executive_summary,
+                "completed",
+            ),
+        )
+        await conn.commit()
+    logger.info(f"Gap report {report.id} stored in database")

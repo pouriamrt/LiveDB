@@ -214,16 +214,44 @@ if __name__ == "__main__":
 
     console = Console()
 
-    console.print(Panel("[1] ETL\n[2] AI Agent", title="Run Mode"))
+    console.print(Panel("[1] ETL\n[2] AI Agent\n[3] Gap Analysis", title="Run Mode"))
 
-    c = Prompt.ask("Choice", choices=["1", "2"], show_choices=False)
+    c = Prompt.ask("Choice", choices=["1", "2", "3"], show_choices=False)
 
     if c == "1":
         asyncio.run(livedb_flow(query="dementia", max_records=10))
-    else:
+    elif c == "2":
         from agents.RunTeam import run_team
 
         session_state = {}
         agent_os, app = run_team(session_state)
         agent_os.serve(app=app, port=7777)
         console.print(Panel("Agent server stopped", title="Run Mode"))
+    elif c == "3":
+        from rich.prompt import IntPrompt
+
+        from gap_analysis.pipeline import gap_analysis_flow
+
+        query = Prompt.ask("Research topic")
+        max_papers = IntPrompt.ask("Max papers to analyze", default=100)
+        days = IntPrompt.ask("Days to look back", default=180)
+
+        console.print(f"\nAnalyzing gaps in: [bold]{query}[/bold]")
+        console.print(f"Scope: {max_papers} papers, last {days} days\n")
+
+        report = asyncio.run(
+            gap_analysis_flow(
+                query=query,
+                max_records=max_papers,
+                start_day=days,
+            )
+        )
+        console.print(
+            Panel(
+                f"Gaps found: {len(report.gaps)}\n"
+                f"Themes: {len(report.themes)}\n"
+                f"Papers analyzed: {report.scope}\n\n"
+                f"Reports saved to reports/ directory",
+                title="Gap Analysis Complete",
+            )
+        )
